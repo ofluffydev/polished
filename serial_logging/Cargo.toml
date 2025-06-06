@@ -1,0 +1,13 @@
+[package]
+name = "serial_logging"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+spin = { version = "0.10.0", features = ["mutex", "once", "spin_mutex"] }
+uart_16550 = "0.3.2"
+x86_64 = "0.15.2"

@@ -1,0 +1,9 @@
+[workspace]
+members = ["bootloader", "kernel", "elf_loader", "files", "serial_logging"]
+resolver = "3"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
