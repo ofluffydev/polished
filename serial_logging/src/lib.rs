@@ -157,3 +157,13 @@ pub fn info_hex(value: u64) {
 pub fn error(text: &str) {
     serial_log!("[ERROR] ", "{}", text);
 }
+
+/// Logs a warning-level message to the serial port.
+///
+/// # Examples
+/// ```
+/// serial::warning("Low disk space");
+/// ```
+pub fn warn(text: &str) {
+    serial_log!("[WARNING] ", "{}", text);
+}

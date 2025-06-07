@@ -31,6 +31,7 @@ name = "bootloader"
 version = "0.1.0"
 dependencies = [
  "elf_loader",
+ "graphics",
  "log",
  "uefi",
 ]
@@ -68,10 +69,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "graphics"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "uefi",
+]
+
+[[package]]
 name = "kernel"
 version = "0.1.0"
 dependencies = [
  "buddy_system_allocator",
+ "elf_loader",
+ "graphics",
  "serial_logging",
 ]
 

@@ -1,5 +1,12 @@
 [workspace]
-members = ["bootloader", "kernel", "elf_loader", "files", "serial_logging"]
+members = [
+    "bootloader",
+    "kernel",
+    "elf_loader",
+    "files",
+    "serial_logging",
+    "graphics",
+]
 resolver = "3"
 
 [profile.dev]
@@ -7,3 +14,7 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
+
+[workspace.dependencies]
+uefi = { version = "0.35.0" }
+log = "0.4.27"

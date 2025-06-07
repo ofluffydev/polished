@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["rlib"]
 
 [dependencies]
-uefi = { version = "0.35.0", features = ["alloc", "logger", "panic_handler"] }
+uefi = { workspace = true, features = ["alloc", "logger", "panic_handler"] }
 files = { path = "../files" }
 xmas-elf = "0.10.0"
-log = "0.4.27"
+log = { workspace = true }

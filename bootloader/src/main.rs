@@ -3,7 +3,10 @@
 
 extern crate alloc;
 
+use core::arch::asm;
+
 use elf_loader::load_kernel;
+use graphics::framebuffer::{initialize_framebuffer, FramebufferInfo};
 use log::info;
 use uefi::{
     boot::{get_handle_for_protocol, open_protocol_exclusive},
@@ -32,7 +35,18 @@ pub fn boot_system() {
 
     info!("Jumping to kernel entry point at 0x{entry_point:x}");
 
+    let framebuffer_info = initialize_framebuffer();
+    info!("Framebuffer info: {framebuffer_info:?}");
+
+    info!("Jumping to kernel entry point at 0x{entry_point:x}");
+
     unsafe {
+        let fb_ptr = &framebuffer_info as *const FramebufferInfo;
+        asm!(
+            "mov rdi, {0}",
+            in(reg) fb_ptr,
+            options(nostack)
+        );
         kernel_entry();
     }
 }
