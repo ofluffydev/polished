@@ -11,3 +11,4 @@ uefi = { workspace = true, features = ["alloc", "logger", "panic_handler"] }
 files = { path = "../files" }
 xmas-elf = "0.10.0"
 log = { workspace = true }
+graphics = { path = "../graphics" }

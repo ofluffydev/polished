@@ -1,0 +1,2 @@
+[target.x86_64-polished-kernel]
+rustflags = ["-C", "link-arg=-Tkernel/linker.ld"]

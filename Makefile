@@ -11,7 +11,7 @@ BOOTLOADER_PATH = $(CURDIR)/target/x86_64-unknown-uefi/$(BOOTLOADER_BUILD_DIR)/b
 ESP_DIR = esp/efi/boot
 
 # Kernel path variables
-KERNEL_BUILD_DIR := release
+KERNEL_BUILD_DIR := $(if $(RELEASE),release,debug)
 KERNEL_NAME = kernel
 KERNEL_PATH = $(CURDIR)/target/x86_64-polished-kernel/$(KERNEL_BUILD_DIR)/$(KERNEL_NAME)
 
@@ -54,6 +54,15 @@ qemu: iso
 		-drive format=raw,file=$(ISO_FILE) \
 		-smp 4 -m 6G -cpu max \
 		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot
+
+debug: iso
+	qemu-system-x86_64 \
+		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
+		-drive format=raw,file=$(ISO_FILE) \
+		-smp 4 -m 6G -cpu max \
+		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot \
+		-s -S \
+		-d unimp,guest_errors
 
 rust-clean:
 	cd kernel && cargo clean

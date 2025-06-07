@@ -10,6 +10,7 @@ pub mod memory;
 
 extern crate alloc;
 use alloc::format;
+use graphics::drawing::framebuffer_x_demo;
 use graphics::framebuffer::FramebufferInfo;
 
 // False positive error shows here for rust analyzer, ignore it.
@@ -48,14 +49,16 @@ pub unsafe extern "C" fn _start(fb_info_ptr: *const FramebufferInfo) -> ! {
         serial_logging::info("FramebufferInfo pointer is null");
     }
 
-    // Fille the buffer with black
+    // Fill the buffer with black
     if !fb_info_ptr.is_null() {
-        let fb = unsafe { &*fb_info_ptr };
+        let fb = unsafe { &mut *(fb_info_ptr as *mut FramebufferInfo) };
         let buffer = unsafe { core::slice::from_raw_parts_mut(fb.address as *mut u8, fb.size) };
         for byte in buffer.iter_mut() {
             *byte = 0; // Fill with black
         }
         serial_logging::info("Framebuffer buffer filled with black");
+
+        framebuffer_x_demo(fb);
     } else {
         serial_logging::warn("FramebufferInfo pointer is null, cannot fill buffer");
     }

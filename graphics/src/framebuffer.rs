@@ -15,9 +15,10 @@ pub struct FramebufferInfo {
     pub width: usize,
     pub height: usize,
     pub stride: usize,
-    pub format: FramebufferFormat
+    pub format: FramebufferFormat,
 }
 
+#[repr(C)]
 #[derive(Debug)]
 pub enum FramebufferFormat {
     Rgb,

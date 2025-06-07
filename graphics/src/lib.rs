@@ -1,5 +1,4 @@
 #![no_std]
 
+pub mod drawing;
 pub mod framebuffer;
-
-pub use framebuffer::FramebufferInfo;
