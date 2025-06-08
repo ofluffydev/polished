@@ -67,3 +67,6 @@ debug: iso
 rust-clean:
 	cd kernel && cargo clean
 	cd bootloader && cargo clean
+
+clean: rust-clean
+	rm -rf esp $(FAT_IMG) iso $(ISO_FILE)

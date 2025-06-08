@@ -5,7 +5,7 @@ members = [
     "elf_loader",
     "files",
     "serial_logging",
-    "graphics",
+    "graphics", "workspace-default-package",
 ]
 resolver = "3"
 

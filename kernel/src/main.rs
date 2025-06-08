@@ -14,6 +14,7 @@ use graphics::drawing::framebuffer_x_demo;
 use graphics::framebuffer::FramebufferInfo;
 
 // False positive error shows here for rust analyzer, ignore it.
+// Sometimes saving the file will fix it.
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
