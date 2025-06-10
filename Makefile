@@ -56,7 +56,7 @@ qemu: iso
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
 		-smp 4 -m 6G -cpu max \
-		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot
+		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot
 
 # Headless (no graphical output)
 qemu-nographic: iso
@@ -64,7 +64,7 @@ qemu-nographic: iso
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
 		-smp 4 -m 6G -cpu max \
-		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
+		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-nographic
 
 # QEMU with GDB stub (graphical)
@@ -73,7 +73,7 @@ qemu-gdb: iso
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
 		-smp 4 -m 6G -cpu max \
-		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot \
+		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot \
 		-s -S \
 		-d unimp,guest_errors
 
@@ -83,7 +83,7 @@ qemu-gdb-nographic: iso
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
 		-smp 4 -m 6G -cpu max \
-		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
+		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-nographic \
 		-s -S \
 		-d unimp,guest_errors
@@ -94,7 +94,15 @@ qemu-debug: iso
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
 		-smp 4 -m 6G -cpu max \
-		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
+		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
+		-d int
+
+qemu-debug-nographic: iso
+	qemu-system-x86_64 \
+		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
+		-drive format=raw,file=$(ISO_FILE) \
+		-smp 4 -m 6G -cpu max \
+		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-nographic \
 		-d int
 

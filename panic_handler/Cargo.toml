@@ -1,0 +1,7 @@
+[package]
+name = "panic_handler"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serial_logging = { path = "../serial_logging" }

@@ -8,6 +8,12 @@ members = [
     "graphics",
     "workspace-default-package",
     "interrupts",
+    "scancodes",
+    "gdt",
+    "ps2",
+    "panic_handler",
+    "memory",
+    "x86_commands",
 ]
 resolver = "3"
 
@@ -21,3 +27,4 @@ panic = "abort"
 uefi = { version = "0.35.0" }
 log = "0.4.27"
 once_cell = { version = "1.21.3", default-features = false }
+x86_64 = "0.15.2"

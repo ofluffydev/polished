@@ -8,3 +8,4 @@ lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 x86_64 = "0.15.2"
 serial_logging = { path = "../serial_logging" }
 once_cell = { workspace = true }
+scancodes = { path = "../scancodes" }

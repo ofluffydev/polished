@@ -9,6 +9,10 @@ elf_loader = { path = "../elf_loader" }
 graphics = { path = "../graphics", default-features = false }
 interrupts = { path = "../interrupts" }
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
-x86_64 = "0.15.2"
 once_cell = {workspace = true}
 linked_list_allocator = "0.10.5"
+x86_64 = { workspace = true }
+gdt = { path = "../gdt" }
+ps2 = { path = "../ps2" }
+panic_handler = { path = "../panic_handler" }
+memory = { path = "../memory" }

@@ -22,17 +22,20 @@
 - [x] Set up handler: Virtualization exception
 
 ## 2. Hardware Interrupts (IRQs)
-- [ ] Set up handler: Timer (PIT/APIC)
-- [ ] Set up handler: Keyboard
-- [ ] Set up handler: Mouse
-- [ ] Set up handler: Disk controllers (SATA, NVMe)
-- [ ] Set up handler: Network cards
-- [ ] Set up handler: USB controllers
-- [ ] Set up handler: Other hardware devices as present
+- [x] Set up handler: Timer (PIT/APIC)
+- [x] Set up handler: Keyboard
+- [x] Set up handler: Mouse
+- [x] Set up handler: Disk controllers (SATA, NVMe)
+- [x] Set up handler: Network cards
+- [x] Set up handler: USB controllers
+- [x] Set up handler: Other hardware devices as present
 
 ## 3. Software Interrupts (Syscalls)
-- [ ] Set up syscall interrupt vector (e.g., int 0x80) if needed
-- [ ] Set up syscall entry point for `syscall` instruction
+~~- [ ] Set up syscall interrupt vector (e.g., int 0x80) if needed~~
+
+~~- [ ] Set up syscall entry point for `syscall` instruction~~
+
+Will use the modern syscall mechanism instead of legacy interrupts.
 
 ## 4. Stack Management
 - [ ] Configure Interrupt Stack Table (IST) for double fault

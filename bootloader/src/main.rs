@@ -21,7 +21,6 @@ fn main() -> Status {
     let mut output = open_protocol_exclusive::<Output>(handle).unwrap();
     output.clear().expect("Failed to clear screen");
     info!("Polished OS Bootloader online!");
-    boot::stall(2_000_000);
     output.clear().expect("Failed to clear screen");
     boot_system();
 

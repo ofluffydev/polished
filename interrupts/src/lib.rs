@@ -16,7 +16,7 @@ pub fn init_idt() {
         IDT.get_or_init(|| {
             let mut idt = InterruptDescriptorTable::new();
             cpu_exceptions::setup_cpu_exceptions(&mut idt);
-            idt[32].set_handler_fn(hardware_interrupts::timer_interrupt_handler);
+            hardware_interrupts::setup_hardware_interrupts(&mut idt);
             idt
         })
     };
