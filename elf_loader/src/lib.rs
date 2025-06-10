@@ -1,8 +1,5 @@
 #![no_std]
 
-// Library for parsing/loading ELF files in no_std environments.
-// Implementation will be added later.
-
 use files::read_file;
 use uefi::boot::{self, AllocateType, MemoryType};
 use xmas_elf::{ElfFile, program};
@@ -10,6 +7,7 @@ use xmas_elf::{ElfFile, program};
 /// Loads a kernel from the specified ELF file path.
 /// An example file path would be "\EFI\BOOT\kernel".
 pub fn load_kernel(file_path: &str) -> (usize, unsafe extern "C" fn() -> !) {
+    // Some change
     log::info!("Loading kernel from ELF file: {file_path}");
     let bytes = read_file(file_path).unwrap();
     let elf = ElfFile::new(&bytes).expect("Failed to parse ELF file");

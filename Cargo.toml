@@ -5,7 +5,9 @@ members = [
     "elf_loader",
     "files",
     "serial_logging",
-    "graphics", "workspace-default-package",
+    "graphics",
+    "workspace-default-package",
+    "interrupts",
 ]
 resolver = "3"
 
@@ -18,3 +20,4 @@ panic = "abort"
 [workspace.dependencies]
 uefi = { version = "0.35.0" }
 log = "0.4.27"
+once_cell = { version = "1.21.3", default-features = false }

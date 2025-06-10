@@ -25,7 +25,8 @@ build-bootloader:
 	cargo build -p bootloader --target x86_64-unknown-uefi $(if $(filter release,$(BOOTLOADER_BUILD_DIR)),--release,)
 
 build-kernel:
-	env RUSTFLAGS="-C relocation-model=static -C link-args=-no-pie" cargo build -p kernel -Zbuild-std=core,alloc --target x86_64-polished-kernel.json $(if $(filter release,$(KERNEL_BUILD_DIR)),--release,)
+	env RUSTFLAGS="-C relocation-model=static -C link-args=-no-pie" \
+	cargo build -p kernel -Zbuild-std=core,alloc --target x86_64-polished-kernel.json $(if $(filter release,$(KERNEL_BUILD_DIR)),--release,)
 
 check-artifacts: build-kernel build-bootloader
 	@if [ ! -f $(BOOTLOADER_PATH) ]; then echo "Error: bootloader.efi not found!"; exit 1; fi
@@ -48,6 +49,8 @@ iso: fat
 	cp $(FAT_IMG) iso/
 	xorriso -as mkisofs -R -f -e $(FAT_IMG) -no-emul-boot -o $(ISO_FILE) iso
 
+# QEMU targets
+# Default: graphical QEMU
 qemu: iso
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
@@ -55,7 +58,17 @@ qemu: iso
 		-smp 4 -m 6G -cpu max \
 		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot
 
-debug: iso
+# Headless (no graphical output)
+qemu-nographic: iso
+	qemu-system-x86_64 \
+		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
+		-drive format=raw,file=$(ISO_FILE) \
+		-smp 4 -m 6G -cpu max \
+		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
+		-nographic
+
+# QEMU with GDB stub (graphical)
+qemu-gdb: iso
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
@@ -63,6 +76,27 @@ debug: iso
 		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot \
 		-s -S \
 		-d unimp,guest_errors
+
+# QEMU with GDB stub and no graphics
+qemu-gdb-nographic: iso
+	qemu-system-x86_64 \
+		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
+		-drive format=raw,file=$(ISO_FILE) \
+		-smp 4 -m 6G -cpu max \
+		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
+		-nographic \
+		-s -S \
+		-d unimp,guest_errors
+
+# QEMU with extra debug output (interrupts)
+qemu-debug: iso
+	qemu-system-x86_64 \
+		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
+		-drive format=raw,file=$(ISO_FILE) \
+		-smp 4 -m 6G -cpu max \
+		-device qemu-xhci -device usb-kbd -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
+		-nographic \
+		-d int
 
 rust-clean:
 	cd kernel && cargo clean
