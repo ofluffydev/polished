@@ -15,6 +15,11 @@ KERNEL_BUILD_DIR := $(if $(RELEASE),release,debug)
 KERNEL_NAME = kernel
 KERNEL_PATH = $(CURDIR)/target/x86_64-polished-kernel/$(KERNEL_BUILD_DIR)/$(KERNEL_NAME)
 
+# Optional ext2 support
+EXT2 ?= 0
+EXT2_IMG = ext2.img
+EXT2_MNT = /mnt/polished_ext2
+
 .PHONY: run clean build-kernel build-bootloader check-artifacts esp fat iso qemu rust-clean
 
 run: iso
@@ -26,7 +31,7 @@ build-bootloader:
 
 build-kernel:
 	env RUSTFLAGS="-C relocation-model=static -C link-args=-no-pie" \
-	cargo build -p kernel -Zbuild-std=core,alloc --target x86_64-polished-kernel.json $(if $(filter release,$(KERNEL_BUILD_DIR)),--release,)
+	cargo build -p kernel -Zbuild-std=core,alloc --target x86_64-polished-kernel.json $(if $(filter release,$(KERNEL_BUILD_DIR)),--release,) $(if $(filter 1,$(EXT2)),--features ext2,)
 
 check-artifacts: build-kernel build-bootloader
 	@if [ ! -f $(BOOTLOADER_PATH) ]; then echo "Error: bootloader.efi not found!"; exit 1; fi
@@ -44,19 +49,41 @@ fat: esp
 	mcopy -i $(FAT_IMG) $(ESP_DIR)/bootx64.efi ::/EFI/BOOT
 	mcopy -i $(FAT_IMG) $(ESP_DIR)/$(KERNEL_NAME) ::/EFI/BOOT
 
-iso: fat
-	mkdir -p iso
+ext2-img:
+	dd if=/dev/zero of=ext2root.img bs=1M count=256
+	mkfs.ext2 -F ext2root.img
+	sudo mkdir -p $(EXT2_MNT)
+	sudo mount -o loop ext2root.img $(EXT2_MNT)
+	sudo cp myfile.txt $(EXT2_MNT)/
+	sudo umount $(EXT2_MNT)
+	sudo rmdir $(EXT2_MNT)
+
+iso: fat ext2-img
+	mkdir -p iso/rootimg
 	cp $(FAT_IMG) iso/
-	xorriso -as mkisofs -R -f -e $(FAT_IMG) -no-emul-boot -o $(ISO_FILE) iso
+	cp ext2root.img iso/rootimg/
+	xorriso -as mkisofs -R -f -e $(FAT_IMG) -no-emul-boot \
+		-o $(ISO_FILE) iso
 
 # QEMU targets
 # Default: graphical QEMU
 qemu: iso
-	qemu-system-x86_64 \
-		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
-		-drive format=raw,file=$(ISO_FILE) \
-		-smp 4 -m 6G -cpu max \
-		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot
+	@if [ "$(EXT2)" = "1" ]; then \
+		echo "Running with ext2.img as a real disk (virtio-blk-pci)"; \
+		qemu-system-x86_64 \
+			-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
+			-drive format=raw,file=$(ISO_FILE) \
+			-drive file=$(EXT2_IMG),format=raw,if=none,id=ext2disk \
+			-device virtio-blk-pci,drive=ext2disk \
+			-smp 4 -m 6G -cpu max \
+			-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot; \
+	else \
+		qemu-system-x86_64 \
+			-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
+			-drive format=raw,file=$(ISO_FILE) \
+			-smp 4 -m 6G -cpu max \
+			-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot; \
+	fi
 
 # Headless (no graphical output)
 qemu-nographic: iso

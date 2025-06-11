@@ -6,6 +6,9 @@ readme = "./README.md"
 repository = "https://github.com/ofluffydev/polished"
 version = "0.1.0"
 
+[features]
+ext2 = ["polished_files/ext2"]
+
 [dependencies]
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 linked_list_allocator = "0.10.5"
@@ -19,4 +22,5 @@ polished_memory = { path = "../memory" }
 polished_panic_handler = { path = "../panic_handler" }
 polished_ps2 = { path = "../ps2" }
 polished_serial_logging = { path = "../serial_logging" }
+polished_syscalls = { path = "../syscalls" }
 x86_64 = { workspace = true }

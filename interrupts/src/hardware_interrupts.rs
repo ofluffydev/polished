@@ -21,6 +21,9 @@ pub fn setup_hardware_interrupts(idt: &mut x86_64::structures::idt::InterruptDes
     idt[43].set_handler_fn(network_interrupt_handler);
     idt[55].set_handler_fn(usb_interrupt_handler);
     idt[47].set_handler_fn(other_hardware_interrupt_handler);
+    // Add stubs for additional hardware IRQs as listed in README
+    // (IRQ 0-15: 32-47, already covered above)
+    // If more hardware devices are present, add their handlers here as needed
 }
 
 fn send_eoi() {

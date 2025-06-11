@@ -48,6 +48,7 @@ dependencies = [
  "polished_panic_handler",
  "polished_ps2",
  "polished_serial_logging",
+ "polished_syscalls",
  "x86_64",
 ]
 
@@ -124,6 +125,7 @@ name = "polished_files"
 version = "0.1.0"
 dependencies = [
  "polished_graphics",
+ "polished_serial_logging",
  "uefi",
 ]
 
@@ -186,6 +188,10 @@ dependencies = [
  "uart_16550",
  "x86_64",
 ]
+
+[[package]]
+name = "polished_syscalls"
+version = "0.1.0"
 
 [[package]]
 name = "polished_x86_commands"

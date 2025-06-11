@@ -113,11 +113,28 @@ ______________________________________________________________________
 - [x] ELF kernel loading
 - [x] Custom heap allocator
 - [x] Serial logging
-- [ ] Basic filesystem support
-- [ ] libc and POSIX compatibility
-- [ ] Userland process support
-- [ ] Networking
-- [ ] Graphical interface
+- [ ] Basic filesystem support (beyond kernel loading)
+- [ ] libc and POSIX compatibility layers
+- [ ] Userland process support (process management, syscalls)
+- [ ] Networking stack (TCP/IP, sockets)
+- [ ] Graphical interface (windowing, input, basic compositor)
+- [ ] Expand device driver support (storage, USB, networking, etc.)
+- [ ] Security features (permissions, user authentication)
+- [ ] Power management and resource accounting
+- [ ] Debugging, tracing, and logging facilities
+
+______________________________________________________________________
+
+## Oskit/Library Goals
+
+- Modularize and document each subsystem for reusability (memory, interrupts, graphics, files, etc.)
+- Provide clear APIs and examples for using each oskit component in other projects
+- Add more x86 helpers and abstractions (MSR, port I/O, paging, etc.)
+- Improve test coverage and add example/test kernels for oskit consumers
+
+______________________________________________________________________
+
+For more details, see the kernel and interrupts TODO lists. Contributions and suggestions are welcome!
 
 ______________________________________________________________________
 

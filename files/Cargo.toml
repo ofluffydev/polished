@@ -11,12 +11,14 @@ version = "0.1.0"
 crate-type = ["rlib"]
 
 [features]
+ext2 = []
 uefi = ["dep:uefi"]
 
 default = []
 
 [dependencies]
 polished_graphics = { version = "0.1.0", path = "../graphics", default-features = false }
+polished_serial_logging = { version = "0.1.0", path = "../serial_logging" }
 uefi = { workspace = true, optional = true, features = [
   "alloc",
   "logger",
