@@ -1,24 +1,24 @@
 [package]
-name = "polished_bootloader"
-version = "0.1.0"
-edition = "2024"
-readme = "./README.md"
-license = "Zlib"
 description = "A UEFI bootloader for the Polished OS project."
+edition = "2024"
+license = "Zlib"
+name = "polished_bootloader"
+readme = "./README.md"
 repository = "https://github.com/ofluffydev/polished"
+version = "0.1.0"
 
 [dependencies]
+log = { workspace = true }
+polished_elf_loader = { version = "0.1.0", path = "../elf_loader", features = [
+  "uefi",
+] }
+polished_files = { version = "0.1.0", path = "../files", features = ["uefi"] }
+polished_graphics = { version = "0.1.0", path = "../graphics", features = [
+  "uefi",
+] }
 uefi = { workspace = true, features = [
   "alloc",
   "global_allocator",
   "logger",
   "panic_handler",
 ] }
-log = { workspace = true }
-polished_elf_loader = { version = "0.1.0", path = "../elf_loader", features = [
-  "uefi",
-] }
-polished_graphics = { version = "0.1.0", path = "../graphics", features = [
-  "uefi",
-] }
-polished_files = { version = "0.1.0", path = "../files", features = ["uefi"] }

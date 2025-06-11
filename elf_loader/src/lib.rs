@@ -35,9 +35,10 @@
 #![no_std]
 
 #[cfg(feature = "uefi")]
-use polished_files::read_file;
+use polished_files::uefi::read_file;
 #[cfg(feature = "uefi")]
 use uefi::boot::{self, AllocateType, MemoryType};
+#[cfg(feature = "uefi")]
 use xmas_elf::{ElfFile, program};
 
 #[cfg(feature = "uefi")]

@@ -1,22 +1,22 @@
 [package]
-name = "kernel"
-version = "0.1.0"
 edition = "2024"
-readme = "./README.md"
 license = "Apache-2.0 OR MIT"
+name = "kernel"
+readme = "./README.md"
 repository = "https://github.com/ofluffydev/polished"
+version = "0.1.0"
 
 [dependencies]
-polished_serial_logging = { path = "../serial_logging" }
-polished_elf_loader = { path = "../elf_loader", default-features = false }
-polished_graphics = { path = "../graphics", default-features = false }
-polished_files = { path = "../files", default-features = false }
-polished_interrupts = { path = "../interrupts" }
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
-once_cell = { workspace = true }
 linked_list_allocator = "0.10.5"
-x86_64 = { workspace = true }
+once_cell = { workspace = true }
+polished_elf_loader = { path = "../elf_loader", default-features = false }
+polished_files = { path = "../files", default-features = false }
 polished_gdt = { path = "../gdt" }
-polished_ps2 = { path = "../ps2" }
-polished_panic_handler = { path = "../panic_handler" }
+polished_graphics = { path = "../graphics", default-features = false }
+polished_interrupts = { path = "../interrupts" }
 polished_memory = { path = "../memory" }
+polished_panic_handler = { path = "../panic_handler" }
+polished_ps2 = { path = "../ps2" }
+polished_serial_logging = { path = "../serial_logging" }
+x86_64 = { workspace = true }

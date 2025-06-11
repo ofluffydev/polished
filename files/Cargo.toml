@@ -1,11 +1,11 @@
 [package]
-name = "polished_files"
-version = "0.1.0"
-edition = "2024"
-readme = "./README.md"
-license = "Zlib"
 description = "File loading and (future) filesystem abstraction for Polished OS, supporting UEFI and no_std environments."
+edition = "2024"
+license = "Zlib"
+name = "polished_files"
+readme = "./README.md"
 repository = "https://github.com/ofluffydev/polished"
+version = "0.1.0"
 
 [lib]
 crate-type = ["rlib"]

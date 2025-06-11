@@ -1,0 +1,9 @@
+{
+    "files.exclude": {
+        // "workspace-default-package": true,
+        "esp/": true,
+        "iso/": true,
+        "target/": true,
+        "*.img": true
+    }
+}

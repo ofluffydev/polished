@@ -1,10 +1,10 @@
 [package]
-name = "workspace-default-package"
-version = "0.1.0"
-edition = "2024"
 default-run = "workspace-default-package"
-readme = "./README.md"
+edition = "2024"
 license = "Zlib"
+name = "workspace-default-package"
+readme = "./README.md"
 repository = "https://github.com/ofluffydev/polished"
+version = "0.1.0"
 
 [dependencies]

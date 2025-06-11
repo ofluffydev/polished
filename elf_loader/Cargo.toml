@@ -1,11 +1,11 @@
 [package]
-name = "polished_elf_loader"
-version = "0.1.0"
-edition = "2024"
-readme = "./README.md"
-license = "Zlib"
-repository = "https://github.com/ofluffydev/polished"
 description = "Modular, safe ELF loader for Polished OS, supporting UEFI and no_std environments."
+edition = "2024"
+license = "Zlib"
+name = "polished_elf_loader"
+readme = "./README.md"
+repository = "https://github.com/ofluffydev/polished"
+version = "0.1.0"
 
 [lib]
 crate-type = ["rlib"]
@@ -16,12 +16,12 @@ uefi = ["dep:uefi"]
 default = []
 
 [dependencies]
-polished_files = { version = "0.1.0", path = "../files", default-features = false }
-xmas-elf = "0.10.0"
 log = { workspace = true }
+polished_files = { version = "0.1.0", path = "../files", default-features = false }
 polished_graphics = { version = "0.1.0", path = "../graphics", default-features = false }
 uefi = { workspace = true, optional = true, features = [
   "alloc",
   "logger",
   "panic_handler",
 ] }
+xmas-elf = "0.10.0"

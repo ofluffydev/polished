@@ -1,11 +1,11 @@
 [package]
-name = "polished_graphics"
-version = "0.1.0"
-edition = "2024"
-readme = "./README.md"
-license = "Zlib"
 description = "A graphics library for the Polished OS project."
+edition = "2024"
+license = "Zlib"
+name = "polished_graphics"
+readme = "./README.md"
 repository = "https://github.com/ofluffydev/polished"
+version = "0.1.0"
 
 [lib]
 crate-type = ["rlib"]

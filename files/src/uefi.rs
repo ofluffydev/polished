@@ -15,8 +15,6 @@
 //!
 //! UEFI applications run in a pre-boot environment with access to firmware services. File access is provided via the Simple File System protocol, which exposes FAT-formatted volumes. This library abstracts the protocol details, allowing you to load files by path.
 
-#![no_std]
-
 // Library for loading files in no_std environments.
 
 extern crate alloc;
