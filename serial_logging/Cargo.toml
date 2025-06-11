@@ -1,7 +1,11 @@
 [package]
-name = "serial_logging"
+name = "polished_serial_logging"
 version = "0.1.0"
 edition = "2024"
+readme = "./README.md"
+description = "Serial port output and logging utilities for Polished OS."
+license = "Zlib"
+repository = "https://github.com/ofluffydev/polished"
 
 [lib]
 crate-type = ["rlib"]

@@ -1,14 +1,26 @@
 [package]
-name = "graphics"
+name = "polished_graphics"
 version = "0.1.0"
 edition = "2024"
+readme = "./README.md"
+license = "Zlib"
+description = "A graphics library for the Polished OS project."
+repository = "https://github.com/ofluffydev/polished"
 
 [lib]
 crate-type = ["rlib"]
 
 [features]
+# The `uefi` feature is now non-default and must be enabled manually.
 uefi = ["dep:uefi"]
 
+default = []
+
 [dependencies]
+libm = "0.2.15"
 log = { workspace = true }
-uefi = { workspace = true, optional = true, features = ["alloc", "logger", "panic_handler"] }
+uefi = { workspace = true, optional = true, features = [
+  "alloc",
+  "logger",
+  "panic_handler",
+] }

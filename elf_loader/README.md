@@ -2,7 +2,7 @@
 
 This crate is part of [Polished OS](../README.md), an experimental operating system written in Rust. The ELF loader provides modular, safe ELF (Executable and Linkable Format) loading functionality for use in UEFI bootloaders or other system software that needs to load and execute ELF binaries, such as kernels or userland applications.
 
----
+______________________________________________________________________
 
 ## Overview
 
@@ -16,7 +16,7 @@ The `elf_loader` library is responsible for:
 
 The loader is designed for use in a UEFI environment and leverages UEFI services for memory allocation when the `uefi` feature is enabled.
 
----
+______________________________________________________________________
 
 ## How It Works
 
@@ -33,15 +33,15 @@ unsafe { kernel_entry() };
 **Steps performed:**
 
 1. Reads the ELF file from disk into memory using the `polished_files` crate.
-2. Parses the ELF file structure using the [`xmas-elf`](https://docs.rs/xmas-elf/) crate.
-3. Iterates over each program header (segment):
-    - Skips non-loadable segments (e.g., dynamic sections)
-    - Allocates memory at the requested virtual address using UEFI services
-    - Copies segment data from the file into the allocated memory
-    - Zero-fills any remaining memory for uninitialized data (BSS)
-4. Returns the entry point address (from the ELF header) and a function pointer to the entry point, which can be called to transfer control to the loaded binary.
+1. Parses the ELF file structure using the [`xmas-elf`](https://docs.rs/xmas-elf/) crate.
+1. Iterates over each program header (segment):
+   - Skips non-loadable segments (e.g., dynamic sections)
+   - Allocates memory at the requested virtual address using UEFI services
+   - Copies segment data from the file into the allocated memory
+   - Zero-fills any remaining memory for uninitialized data (BSS)
+1. Returns the entry point address (from the ELF header) and a function pointer to the entry point, which can be called to transfer control to the loaded binary.
 
----
+______________________________________________________________________
 
 ## Features
 
@@ -50,7 +50,7 @@ unsafe { kernel_entry() };
 - Safe Rust abstractions for ELF parsing and loading
 - Designed for use in OS bootloaders and kernel environments
 
----
+______________________________________________________________________
 
 ## Usage
 
@@ -61,7 +61,7 @@ Add this crate as a dependency in your Cargo workspace. If you are building for 
 polished_elf_loader = { path = "../elf_loader", features = ["uefi"] }
 ```
 
----
+______________________________________________________________________
 
 ## License
 
@@ -72,12 +72,12 @@ Unless otherwise noted, all code in this crate is licensed under the [zlib Licen
 > Permission is granted to anyone to use this software for any purpose, including commercial applications, and to alter it and redistribute it freely, subject to the following restrictions:
 >
 > 1. The origin of this software must not be misrepresented; you must not claim that you wrote the original software. If you use this software in a product, an acknowledgment in the product documentation would be appreciated but is not required.
-> 2. Altered source versions must be plainly marked as such, and must not be misrepresented as being the original software.
-> 3. This notice may not be removed or altered from any source distribution.
+> 1. Altered source versions must be plainly marked as such, and must not be misrepresented as being the original software.
+> 1. This notice may not be removed or altered from any source distribution.
 
 See the [LICENSE](../LICENSE) file for full details.
 
----
+______________________________________________________________________
 
 ## Acknowledgments
 
@@ -85,6 +85,6 @@ See the [LICENSE](../LICENSE) file for full details.
 - [uefi-rs](https://github.com/rust-osdev/uefi-rs) — UEFI support in Rust
 - Rust OSDev community — For resources, examples, and inspiration
 
----
+______________________________________________________________________
 
 This library is actively developed as part of Polished OS. Feedback and contributions are welcome!

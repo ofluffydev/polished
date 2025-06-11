@@ -1,6 +1,16 @@
+//! # Hardware Interrupt Handlers
+//!
+//! This module provides setup routines for hardware interrupt handlers (IRQs), such as the programmable interval timer (PIT) and keyboard controller.
+//!
+//! ## What are Hardware Interrupts?
+//!
+//! Hardware interrupts (IRQs) are signals sent by external devices to the CPU, requesting immediate attention. Examples include timer ticks, keyboard presses, and disk I/O completions. The OS must register handlers for these events in the Interrupt Descriptor Table (IDT) to respond appropriately.
+//!
+//! This module provides a function to register hardware interrupt handlers in the IDT.
+
 use core::arch::asm;
 
-use serial_logging::kprint;
+use polished_serial_logging::kprint;
 use x86_64::structures::idt::InterruptStackFrame;
 
 pub fn setup_hardware_interrupts(idt: &mut x86_64::structures::idt::InterruptDescriptorTable) {
@@ -44,7 +54,7 @@ pub extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: Interrupt
         );
     } else if scancode & 0x80 == 0 {
         // Only handle key press (make) codes, ignore break codes
-        let converted = scancodes::scancode_to_ascii(scancode);
+        let converted = polished_scancodes::scancode_to_ascii(scancode);
         match converted {
             Some(ascii) if ascii.is_ascii_graphic() || ascii == b' ' => {
                 kprint!(

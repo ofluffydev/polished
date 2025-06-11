@@ -1,3 +1,36 @@
+//! # Serial Logging Library for x86_64 Kernels
+//!
+//! This crate provides robust serial port logging for kernel and bootloader environments, with a focus on QEMU usage. It offers macros and functions for formatted and raw serial output, as well as a minimal `kprint!` macro for early boot or no_std contexts where dependencies are limited.
+//!
+//! ## QEMU Serial Logging
+//!
+//! QEMU can redirect the guest's serial port (COM1, 0x3F8) to the host's standard output or a file. This allows you to see kernel logs by running QEMU with `-serial stdio` or `-serial file:output.log`. All output sent to the serial port will appear in your terminal or the specified file, making debugging much easier, especially before graphics or higher-level logging is available.
+//!
+//! ## When to Use `serial_log!`/`serial_print!` vs `kprint!`
+//!
+//! - Use `serial_log!`, `serial_print!`, and related macros for most kernel logging. These use a full-featured serial driver (with buffering, formatting, and thread safety) and are suitable once the kernel is initialized.
+//! - Use `kprint!` for minimal, dependency-free output in very early boot stages, or in environments where only core formatting is available. `kprint!` writes directly to the serial port using inline assembly, bypassing all higher-level abstractions.
+//!
+//! ## Features
+//! - Thread-safe, formatted serial output via `serial_print!`, `serial_log!`, etc.
+//! - Log level macros for info, warning, and error messages.
+//! - Hexadecimal logging support.
+//! - Minimal `kprint!` macro for direct serial output.
+//! - Enable/disable logging at runtime.
+//!
+//! ## Example (QEMU):
+//!
+//! ```sh
+//! qemu-system-x86_64 -serial stdio -kernel path/to/kernel
+//! ```
+//!
+//! In your kernel code:
+//!
+//! ```rust
+//! serial_println!("Hello, QEMU serial!");
+//! serial_log!("[INFO] ", "Boot complete");
+//! ```
+
 #![no_std]
 
 use lazy_static::lazy_static;
@@ -30,7 +63,10 @@ pub fn _print(args: ::core::fmt::Arguments) {
     });
 }
 
-/// Prints to the host through the serial interface.
+/// Prints to the host through the serial interface (COM1, 0x3F8).
+///
+/// This macro uses the main serial driver, which is thread-safe and supports formatting.
+/// Output will appear in QEMU's terminal if run with `-serial stdio`.
 #[macro_export]
 macro_rules! serial_print {
     ($($arg:tt)*) => {
@@ -39,6 +75,8 @@ macro_rules! serial_print {
 }
 
 /// Prints to the host through the serial interface, appending a newline.
+///
+/// Equivalent to `serial_print!` but adds a `\n` at the end.
 #[macro_export]
 macro_rules! serial_println {
     () => ($crate::serial_print!("\n"));
@@ -49,6 +87,10 @@ macro_rules! serial_println {
 
 /// Logs a message to the serial port with a given log level prefix.
 ///
+/// - `$level`: Prefix string (e.g., "[INFO] ").
+/// - `$msg`: Message string or format string.
+/// - Additional arguments are formatted as in `format!`.
+///
 /// # Examples
 /// ```
 /// serial_log!("[INFO] ", "Hello, world!");
@@ -57,11 +99,13 @@ macro_rules! serial_println {
 #[macro_export]
 macro_rules! serial_log {
     ($level:expr, $msg:expr) => {
+        // Writes a log message with a prefix and message.
         $crate::serial_write_str($level);
         $crate::serial_write_str($msg);
         $crate::serial_write_str("\r\n");
     };
     ($level:expr, $fmt:expr, $($arg:tt)*) => {{
+        // Writes a formatted log message with a prefix.
         use core::fmt::Write;
         struct SerialLogger;
         impl core::fmt::Write for SerialLogger {
@@ -77,6 +121,9 @@ macro_rules! serial_log {
 }
 
 /// Logs a hexadecimal value to the serial port with a given log level prefix.
+///
+/// - `$level`: Prefix string (e.g., "[INFO] ").
+/// - `$value`: Value to print in hexadecimal.
 ///
 /// # Examples
 /// ```
@@ -97,6 +144,8 @@ const SERIAL_PORT: u16 = 0x3F8; // COM1
 static mut LOGGING_ENABLED: bool = true;
 
 /// Enables serial logging output.
+///
+/// When disabled, all serial output functions become no-ops.
 pub fn enable_serial_logging() {
     unsafe {
         LOGGING_ENABLED = true;
@@ -104,6 +153,8 @@ pub fn enable_serial_logging() {
 }
 
 /// Disables serial logging output.
+///
+/// When disabled, all serial output functions become no-ops.
 pub fn disable_serial_logging() {
     unsafe {
         LOGGING_ENABLED = false;
@@ -111,13 +162,18 @@ pub fn disable_serial_logging() {
 }
 
 /// Returns whether serial logging is currently enabled.
+///
+/// This can be used to temporarily silence serial output.
 pub fn is_serial_logging_enabled() -> bool {
     unsafe { LOGGING_ENABLED }
 }
 
-/// Writes a single byte to the serial port.
+/// Writes a single byte to the serial port (COM1, 0x3F8).
 ///
-/// Blocks until the port is ready to accept a byte.
+/// Blocks until the port is ready to accept a byte. Used internally by all higher-level output functions.
+///
+/// # QEMU
+/// Output will appear in the QEMU terminal if run with `-serial stdio`.
 pub fn serial_write_byte(byte: u8) {
     if !is_serial_logging_enabled() {
         return;
@@ -130,9 +186,9 @@ pub fn serial_write_byte(byte: u8) {
     }
 }
 
-/// Writes a string to the serial port.
+/// Writes a string to the serial port, byte by byte.
 ///
-/// Each byte of the string is sent individually.
+/// Used by all higher-level output macros and functions.
 pub fn serial_write_str(s: &str) {
     if !is_serial_logging_enabled() {
         return;
@@ -144,7 +200,7 @@ pub fn serial_write_str(s: &str) {
 
 /// Writes a hexadecimal representation of a `u64` value to the serial port.
 ///
-/// Does not include a `0x` prefix.
+/// Does not include a `0x` prefix. Used by `serial_log_hex!` and similar macros.
 pub fn serial_write_hex(mut value: u64) {
     if !is_serial_logging_enabled() {
         return;
@@ -170,6 +226,8 @@ pub fn serial_write_hex(mut value: u64) {
 
 /// Logs an info-level message to the serial port.
 ///
+/// Equivalent to `serial_log!("[INFO] ", ...)`.
+///
 /// # Examples
 /// ```
 /// serial::info("System started");
@@ -179,6 +237,8 @@ pub fn info(text: &str) {
 }
 
 /// Logs an info-level hexadecimal value to the serial port.
+///
+/// Equivalent to `serial_log_hex!("[INFO] ", value)`.
 ///
 /// # Examples
 /// ```
@@ -190,6 +250,8 @@ pub fn info_hex(value: u64) {
 
 /// Logs an error-level message to the serial port.
 ///
+/// Equivalent to `serial_log!("[ERROR] ", ...)`.
+///
 /// # Examples
 /// ```
 /// serial::error("An error occurred");
@@ -200,15 +262,19 @@ pub fn error(text: &str) {
 
 /// Logs a warning-level message to the serial port.
 ///
+/// Equivalent to `serial_log!("[WARNING] ", ...)`.
+///
 /// # Examples
 /// ```
-/// serial::warning("Low disk space");
+/// serial::warn("Low disk space");
 /// ```
 pub fn warn(text: &str) {
     serial_log!("[WARNING] ", "{}", text);
 }
 
 /// Logs an error-level message to the serial port with formatting support.
+///
+/// Equivalent to `serial_log!("[ERROR] ", ...)` but as a macro for formatting.
 ///
 /// # Examples
 /// ```

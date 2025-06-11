@@ -1,10 +1,24 @@
 [package]
-name = "files"
+name = "polished_files"
 version = "0.1.0"
 edition = "2024"
+readme = "./README.md"
+license = "Zlib"
+description = "File loading and (future) filesystem abstraction for Polished OS, supporting UEFI and no_std environments."
+repository = "https://github.com/ofluffydev/polished"
 
 [lib]
 crate-type = ["rlib"]
 
+[features]
+uefi = ["dep:uefi"]
+
+default = []
+
 [dependencies]
-uefi = { workspace = true, features = ["alloc", "logger", "panic_handler"] }
+polished_graphics = { version = "0.1.0", path = "../graphics", default-features = false }
+uefi = { workspace = true, optional = true, features = [
+  "alloc",
+  "logger",
+  "panic_handler",
+] }

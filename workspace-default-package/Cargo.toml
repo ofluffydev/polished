@@ -3,5 +3,8 @@ name = "workspace-default-package"
 version = "0.1.0"
 edition = "2024"
 default-run = "workspace-default-package"
+readme = "./README.md"
+license = "Zlib"
+repository = "https://github.com/ofluffydev/polished"
 
 [dependencies]

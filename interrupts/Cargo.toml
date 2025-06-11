@@ -1,11 +1,14 @@
 [package]
-name = "interrupts"
+name = "polished_interrupts"
 version = "0.1.0"
 edition = "2024"
+readme = "./README.md"
+license = "Zlib"
+repository = "https://github.com/ofluffydev/polished"
 
 [dependencies]
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 x86_64 = "0.15.2"
-serial_logging = { path = "../serial_logging" }
+polished_serial_logging = { path = "../serial_logging" }
 once_cell = { workspace = true }
-scancodes = { path = "../scancodes" }
+polished_scancodes = { path = "../scancodes" }

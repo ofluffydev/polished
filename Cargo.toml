@@ -1,19 +1,19 @@
 [workspace]
 members = [
-    "bootloader",
-    "kernel",
-    "elf_loader",
-    "files",
-    "serial_logging",
-    "graphics",
-    "workspace-default-package",
-    "interrupts",
-    "scancodes",
-    "gdt",
-    "ps2",
-    "panic_handler",
-    "memory",
-    "x86_commands",
+  "bootloader",
+  "kernel",
+  "elf_loader",
+  "files",
+  "serial_logging",
+  "graphics",
+  "workspace-default-package",
+  "interrupts",
+  "scancodes",
+  "gdt",
+  "ps2",
+  "panic_handler",
+  "memory",
+  "x86_commands",
 ]
 resolver = "3"
 

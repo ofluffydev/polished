@@ -7,7 +7,7 @@ ISO_FILE = polished.iso
 # KERNEL_PATH = $(CURDIR)/kernel/target/x86_64-custom/release/$(KERNEL_NAME)
 # BOOTLOADER_BUILD_DIR := $(if $(RELEASE),release,debug)
 BOOTLOADER_BUILD_DIR := $(if $(RELEASE),release,debug)
-BOOTLOADER_PATH = $(CURDIR)/target/x86_64-unknown-uefi/$(BOOTLOADER_BUILD_DIR)/bootloader.efi
+BOOTLOADER_PATH = $(CURDIR)/target/x86_64-unknown-uefi/$(BOOTLOADER_BUILD_DIR)/polished_bootloader.efi
 ESP_DIR = esp/efi/boot
 
 # Kernel path variables
@@ -22,7 +22,7 @@ run: iso
 	$(MAKE) qemu
 
 build-bootloader:
-	cargo build -p bootloader --target x86_64-unknown-uefi $(if $(filter release,$(BOOTLOADER_BUILD_DIR)),--release,)
+	cargo build -p polished_bootloader --target x86_64-unknown-uefi $(if $(filter release,$(BOOTLOADER_BUILD_DIR)),--release,)
 
 build-kernel:
 	env RUSTFLAGS="-C relocation-model=static -C link-args=-no-pie" \
@@ -112,3 +112,29 @@ rust-clean:
 
 clean: rust-clean
 	rm -rf esp $(FAT_IMG) iso $(ISO_FILE)
+
+format:
+	@echo "Formatting Rust code with cargo fmt..."
+	cargo fmt --all
+	@echo "Formatting TOML files with taplo..."
+	taplo format '**/*.toml'
+	@echo "Formatting Markdown files with mdformat..."
+	mdformat .
+	@echo "Formatting JSON files with jq..."
+	for f in *.json; do jq . "$$f" > tmp.json && mv tmp.json "$$f"; done
+	@echo "Done formatting files."
+
+
+publish:
+	-cargo publish -p polished_bootloader --allow-dirty
+	-cargo publish -p polished_files --allow-dirty
+	-cargo publish -p polished_graphics --allow-dirty
+	-cargo publish -p polished_panic_handler --allow-dirty
+	-cargo publish -p polished_scancodes --allow-dirty
+	-cargo publish -p polished_elf_loader --allow-dirty
+	-cargo publish -p polished_gdt --allow-dirty
+	-cargo publish -p polished_interrupts --allow-dirty
+	-cargo publish -p polished_memory --allow-dirty
+	-cargo publish -p polished_ps2 --allow-dirty
+	-cargo publish -p polished_serial_logging --allow-dirty
+	-cargo publish -p polished_x86_commands --allow-dirty

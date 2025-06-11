@@ -1,6 +1,10 @@
 [package]
-name = "x86_commands"
+name = "polished_x86_commands"
 version = "0.1.0"
 edition = "2024"
+readme = "./README.md"
+description = "Low-level x86 instructions and utilities for Polished OS."
+license = "Zlib"
+repository = "https://github.com/ofluffydev/polished"
 
 [dependencies]

@@ -1,7 +1,11 @@
 [package]
-name = "panic_handler"
+name = "polished_panic_handler"
 version = "0.1.0"
 edition = "2024"
+description = "Panic handler for Polished OS, providing custom panic behavior and logging."
+readme = "./README.md"
+license = "Zlib"
+repository = "https://github.com/ofluffydev/polished"
 
 [dependencies]
-serial_logging = { path = "../serial_logging" }
+polished_serial_logging = { version = "0.1.0", path = "../serial_logging" }

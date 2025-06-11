@@ -3,15 +3,17 @@
 
 extern crate alloc;
 
-use panic_handler as _; // Import the panic handler
-use memory as _; // Import the memory module for memset, memcpy, etc.
+use polished_interrupts::init_idt;
+use polished_memory as _;
+use polished_panic_handler as _; // Import the panic handler // Import the memory module for memset, memcpy, etc.
 
 use alloc::format;
 use core::arch::{asm, naked_asm};
-use graphics::drawing::framebuffer_x_demo;
-use graphics::framebuffer::FramebufferInfo;
 use linked_list_allocator::LockedHeap;
-use serial_logging::{info, warn};
+use polished_graphics::drawing::framebuffer_x_demo;
+use polished_graphics::framebuffer::FramebufferInfo;
+use polished_ps2::ps2_init;
+use polished_serial_logging::{info, warn};
 
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
@@ -68,9 +70,9 @@ fn clear_framebuffer(fb_info_ptr: *const FramebufferInfo) {
 }
 
 fn init_interrupts() {
-    serial_logging::info("Loading IDT...");
-    interrupts::init_idt();
-    serial_logging::info("IDT loaded");
+    info("Loading IDT...");
+    init_idt();
+    info("IDT loaded");
 }
 
 /// # Safety
@@ -81,10 +83,10 @@ pub unsafe extern "C" fn kernel_entry(fb_info_ptr: *const FramebufferInfo) -> ! 
     init_allocator();
     info("Hello from the kernel!");
     info("Initializing GDT...");
-    gdt::init_gdt();
+    polished_gdt::init_gdt();
     info("GDT initialized");
     init_interrupts();
-    ps2::ps2_init();
+    ps2_init();
     log_framebuffer_info(fb_info_ptr);
     clear_framebuffer(fb_info_ptr);
     x86_64::instructions::interrupts::enable();

@@ -27,81 +27,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b8e56985ec62d17e9c1001dc89c88ecd7dc08e47eba5ec7c29c7b5eeecde967"
 
 [[package]]
-name = "bootloader"
-version = "0.1.0"
-dependencies = [
- "elf_loader",
- "graphics",
- "log",
- "uefi",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "elf_loader"
-version = "0.1.0"
-dependencies = [
- "files",
- "graphics",
- "log",
- "uefi",
- "xmas-elf",
-]
-
-[[package]]
-name = "files"
-version = "0.1.0"
-dependencies = [
- "uefi",
-]
-
-[[package]]
-name = "gdt"
-version = "0.1.0"
-dependencies = [
- "once_cell",
- "x86_64",
-]
-
-[[package]]
-name = "graphics"
-version = "0.1.0"
-dependencies = [
- "log",
- "uefi",
-]
-
-[[package]]
-name = "interrupts"
-version = "0.1.0"
-dependencies = [
- "lazy_static",
- "once_cell",
- "scancodes",
- "serial_logging",
- "x86_64",
-]
-
-[[package]]
 name = "kernel"
 version = "0.1.0"
 dependencies = [
- "elf_loader",
- "gdt",
- "graphics",
- "interrupts",
  "lazy_static",
  "linked_list_allocator",
- "memory",
  "once_cell",
- "panic_handler",
- "ps2",
- "serial_logging",
+ "polished_elf_loader",
+ "polished_files",
+ "polished_gdt",
+ "polished_graphics",
+ "polished_interrupts",
+ "polished_memory",
+ "polished_panic_handler",
+ "polished_ps2",
+ "polished_serial_logging",
  "x86_64",
 ]
 
@@ -113,6 +59,12 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 dependencies = [
  "spin 0.9.8",
 ]
+
+[[package]]
+name = "libm"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
 name = "linked_list_allocator"
@@ -140,21 +92,104 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
-name = "memory"
-version = "0.1.0"
-
-[[package]]
 name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
-name = "panic_handler"
+name = "polished_bootloader"
 version = "0.1.0"
 dependencies = [
- "serial_logging",
+ "log",
+ "polished_elf_loader",
+ "polished_files",
+ "polished_graphics",
+ "uefi",
 ]
+
+[[package]]
+name = "polished_elf_loader"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "polished_files",
+ "polished_graphics",
+ "uefi",
+ "xmas-elf",
+]
+
+[[package]]
+name = "polished_files"
+version = "0.1.0"
+dependencies = [
+ "polished_graphics",
+ "uefi",
+]
+
+[[package]]
+name = "polished_gdt"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "x86_64",
+]
+
+[[package]]
+name = "polished_graphics"
+version = "0.1.0"
+dependencies = [
+ "libm",
+ "log",
+ "uefi",
+]
+
+[[package]]
+name = "polished_interrupts"
+version = "0.1.0"
+dependencies = [
+ "lazy_static",
+ "once_cell",
+ "polished_scancodes",
+ "polished_serial_logging",
+ "x86_64",
+]
+
+[[package]]
+name = "polished_memory"
+version = "0.1.0"
+
+[[package]]
+name = "polished_panic_handler"
+version = "0.1.0"
+dependencies = [
+ "polished_serial_logging",
+]
+
+[[package]]
+name = "polished_ps2"
+version = "0.1.0"
+dependencies = [
+ "polished_serial_logging",
+]
+
+[[package]]
+name = "polished_scancodes"
+version = "0.1.0"
+
+[[package]]
+name = "polished_serial_logging"
+version = "0.1.0"
+dependencies = [
+ "lazy_static",
+ "spin 0.10.0",
+ "uart_16550",
+ "x86_64",
+]
+
+[[package]]
+name = "polished_x86_commands"
+version = "0.1.0"
 
 [[package]]
 name = "proc-macro2"
@@ -163,13 +198,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "ps2"
-version = "0.1.0"
-dependencies = [
- "serial_logging",
 ]
 
 [[package]]
@@ -217,24 +245,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a0d197bd2c9dc6e53b84da9556a69ba4cdfab8619eb41a8bd1cc2027a0f6b1d"
 
 [[package]]
-name = "scancodes"
-version = "0.1.0"
-
-[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "serial_logging"
-version = "0.1.0"
-dependencies = [
- "lazy_static",
- "spin 0.10.0",
- "uart_16550",
- "x86_64",
-]
 
 [[package]]
 name = "spin"
@@ -372,10 +386,6 @@ dependencies = [
  "rustversion",
  "volatile",
 ]
-
-[[package]]
-name = "x86_commands"
-version = "0.1.0"
 
 [[package]]
 name = "xmas-elf"

@@ -1,3 +1,21 @@
+//! # memory
+//!
+//! This crate provides fundamental memory manipulation routines (`memset`, `memcmp`, `memcpy`, and `memmove`) for use in `no_std` Rust environments, such as kernels, bootloaders, or embedded systems.
+//!
+//! ## Why is this needed?
+//!
+//! In `no_std` environments, the Rust standard library is unavailable, including its implementations of essential C library functions like `memset`, `memcmp`, `memcpy`, and `memmove`. However, the Rust compiler and core library expect these functions to exist, as they are often used for low-level memory operations, optimizations, and code generation. If these symbols are missing, linking will fail or runtime errors may occur.
+//!
+//! By providing these functions with the correct signatures and `#[no_mangle]` attributes, this crate ensures that Rust code (and any C code linked in) can safely and efficiently perform basic memory operations, even in bare-metal or OS development contexts.
+//!
+//! ## Safety
+//!
+//! All functions in this crate are `unsafe` and require the caller to uphold strict invariants regarding pointer validity, alignment, and region overlap. See each function's documentation for details.
+//!
+//! ## Usage
+//!
+//! Link this crate into your `no_std` project to satisfy the compiler's requirements for these memory routines. You may also use these functions directly if needed.
+
 #![no_std]
 
 use core::ptr;
