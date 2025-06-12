@@ -26,16 +26,68 @@
 
 #![no_std]
 
+#[cfg(feature = "uefi")]
+extern crate uefi;
+
+#[cfg(feature = "uefi")]
 use core::arch::asm;
 
+#[cfg(feature = "uefi")]
 use log::info;
+#[cfg(feature = "uefi")]
 use polished_elf_loader::load_kernel;
-use polished_graphics::framebuffer::{FramebufferInfo, initialize_framebuffer};
+#[cfg(feature = "uefi")]
+use polished_graphics::framebuffer::FramebufferInfo;
+#[cfg(feature = "uefi")]
 use uefi::{
     boot::{get_handle_for_protocol, open_protocol_exclusive},
     proto::console::text::Output,
 };
 
+/// Boot information structure passed to the kernel by the bootloader.
+///
+/// This struct contains all the information the kernel needs to initialize itself after being loaded by the bootloader.
+/// All addresses are physical addresses. The fields are designed to be extensible and compatible with C.
+///
+/// # Fields
+/// - `memory_map_addr`: Physical address of the memory map provided by UEFI.
+/// - `memory_map_entries`: Number of entries in the memory map.
+/// - `initramfs_addr`: Physical address of the initramfs blob (if present).
+/// - `initramfs_size`: Size of the initramfs blob in bytes.
+/// - `cmdline_addr`: Physical address of the kernel command line string.
+/// - `cmdline_len`: Length of the command line string (excluding null terminator).
+/// - `framebuffer_addr`: Physical address of the framebuffer (if present).
+/// - `framebuffer_width`: Width of the framebuffer in pixels.
+/// - `framebuffer_height`: Height of the framebuffer in pixels.
+/// - `framebuffer_pitch`: Number of bytes per scanline in the framebuffer.
+/// - `framebuffer_bpp`: Bits per pixel in the framebuffer.
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct BootInfo {
+    /// Physical address of the memory map.
+    pub memory_map_addr: u64,
+    /// Number of entries in the memory map.
+    pub memory_map_entries: u64,
+
+    /// Physical address of the initramfs blob.
+    pub initramfs_addr: u64,
+    /// Size of the initramfs blob in bytes.
+    pub initramfs_size: u64,
+
+    /// Physical address of the kernel command line string.
+    pub cmdline_addr: u64,
+    /// Length of the command line string (excluding null terminator).
+    pub cmdline_len: u64,
+
+    /// Optional framebuffer info.
+    pub framebuffer_addr: u64,
+    pub framebuffer_width: u32,
+    pub framebuffer_height: u32,
+    pub framebuffer_pitch: u32,
+    pub framebuffer_bpp: u8,
+}
+
+#[cfg(feature = "uefi")]
 /// Boots the system by loading the kernel, initializing the framebuffer, and transferring control to the kernel.
 ///
 /// # Arguments
@@ -68,26 +120,48 @@ pub fn boot_system(kernel_path: &str) {
 
     // Initialize the framebuffer and retrieve its configuration info (resolution, address, etc.).
     let framebuffer_info = initialize_framebuffer();
-    // Log the framebuffer information for debugging and diagnostics.
     info!("Framebuffer info: {framebuffer_info:?}");
 
-    // Log again before transferring control to the kernel (redundant, but ensures visibility in logs).
-    info!("Jumping to kernel entry point at 0x{entry_point:x}");
+    // Determine bits per pixel based on framebuffer format (assume 32bpp for Rgb/Bgr/Bitmask, 0 for BltOnly)
+    let (bpp, pitch) = match framebuffer_info.format {
+        polished_graphics::framebuffer::FramebufferFormat::Rgb |
+        polished_graphics::framebuffer::FramebufferFormat::Bgr |
+        polished_graphics::framebuffer::FramebufferFormat::Bitmask => (32u8, framebuffer_info.stride as u32 * 4),
+        polished_graphics::framebuffer::FramebufferFormat::BltOnly => (0u8, 0u32),
+    };
+
+    // Construct BootInfo struct to pass to the kernel
+    let boot_info = BootInfo {
+        memory_map_addr: 0, // TODO: Fill with real memory map address if needed
+        memory_map_entries: 0, // TODO: Fill with real memory map entries if needed
+        initramfs_addr: 0, // TODO: Fill with real initramfs address if needed
+        initramfs_size: 0, // TODO: Fill with real initramfs size if needed
+        cmdline_addr: 0, // TODO: Fill with real cmdline address if needed
+        cmdline_len: 0, // TODO: Fill with real cmdline length if needed
+        framebuffer_addr: framebuffer_info.address,
+        framebuffer_width: framebuffer_info.width as u32,
+        framebuffer_height: framebuffer_info.height as u32,
+        framebuffer_pitch: pitch,
+        framebuffer_bpp: bpp,
+    };
+
+    info!("BootInfo: {boot_info:?}");
+
+    // Pass pointer to BootInfo to the kernel
+    let boot_info_ptr = &boot_info as *const BootInfo;
+    info!("Jumping to kernel entry point at 0x{entry_point:x} with BootInfo ptr: 0x{:x}", boot_info_ptr as usize);
 
     unsafe {
-        // Prepare a pointer to the framebuffer info struct to pass to the kernel.
-        let fb_ptr = &framebuffer_info as *const FramebufferInfo;
-        // Use inline assembly to set up the first argument (RDI) and call the kernel entry point.
-        // This transfers control to the kernel, passing the framebuffer info pointer as an argument.
         asm!(
             "mov rdi, {0}",
             "call {1}",
-            in(reg) fb_ptr,
+            in(reg) boot_info_ptr,
             in(reg) kernel_entry,
         );
     }
 }
 
+#[cfg(feature = "uefi")]
 /// Initializes the UEFI environment and clears the screen.
 ///
 /// This function sets up the UEFI environment and clears the text output screen using the UEFI Output protocol.
@@ -102,6 +176,7 @@ pub fn uefi_init() {
     output.clear().expect("Failed to clear screen");
 }
 
+#[cfg(feature = "uefi")]
 /// Initializes the UEFI environment, clears the screen, and displays a greeting message.
 ///
 /// # Arguments
@@ -118,4 +193,46 @@ pub fn uefi_init_with_greeting(greeting: &str) {
     output.clear().expect("Failed to clear screen");
     info!("{greeting}");
     output.clear().expect("Failed to clear screen");
+}
+
+
+/// Initialize the framebuffer using UEFI's Graphics Output Protocol (GOP).
+///
+/// # Returns
+/// A `FramebufferInfo` struct describing the framebuffer's memory and display properties.
+///
+/// # Panics
+/// This function will panic if the GOP protocol cannot be accessed (should only be used in UEFI environments).
+#[cfg(feature = "uefi")]
+pub fn initialize_framebuffer() -> FramebufferInfo {
+    use polished_graphics::framebuffer::FramebufferFormat;
+    use uefi::proto::console::gop::{self, GraphicsOutput};
+
+    let gop_handle = get_handle_for_protocol::<GraphicsOutput>().unwrap();
+    let mut gop_protocol = open_protocol_exclusive::<GraphicsOutput>(gop_handle).unwrap();
+    let gop = gop_protocol.get_mut().unwrap();
+    let mode_info = gop.current_mode_info();
+    let resolution = mode_info.resolution();
+    let stride = mode_info.stride();
+    let pixel_format = mode_info.pixel_format();
+
+    let mut gop_buffer = gop.frame_buffer();
+    let gop_buffer_first_byte = gop_buffer.as_mut_ptr() as usize;
+
+    info!("Framebuffer address: 0x{gop_buffer_first_byte:x}");
+    info!("Framebuffer size: {} bytes", gop_buffer.size());
+
+    FramebufferInfo {
+        address: gop_buffer.as_mut_ptr() as u64,
+        size: gop_buffer.size(),
+        width: resolution.0,
+        height: resolution.1,
+        stride,
+        format: match pixel_format {
+            gop::PixelFormat::Rgb => FramebufferFormat::Rgb,
+            gop::PixelFormat::Bgr => FramebufferFormat::Bgr,
+            gop::PixelFormat::Bitmask => FramebufferFormat::Bitmask,
+            gop::PixelFormat::BltOnly => FramebufferFormat::BltOnly,
+        },
+    }
 }

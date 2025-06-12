@@ -15,16 +15,26 @@ KERNEL_BUILD_DIR := $(if $(RELEASE),release,debug)
 KERNEL_NAME = kernel
 KERNEL_PATH = $(CURDIR)/target/x86_64-polished-kernel/$(KERNEL_BUILD_DIR)/$(KERNEL_NAME)
 
+# USTAR archive creation (required before kernel build)
+.PHONY: ustar-archive
+ustar-archive:
+ifneq ($(USTAR),)
+ifeq ($(USTAR),1)
+	@echo "Creating archive.tar from ustar-files/ ..."
+	tar --format=ustar -cvf archive.tar ustar-files/
+endif
+endif
+
 .PHONY: run clean build-kernel build-bootloader check-artifacts esp fat iso qemu rust-clean
 
 run: iso
 	# Run with QEMU
 	$(MAKE) qemu
 
-build-bootloader:
-	cargo build -p polished_bootloader --target x86_64-unknown-uefi $(if $(filter release,$(BOOTLOADER_BUILD_DIR)),--release,)
+build-bootloader: ustar-archive
+	cargo build -p polished_bootloader --target x86_64-unknown-uefi --features uefi $(if $(filter release,$(BOOTLOADER_BUILD_DIR)),--release,)
 
-build-kernel:
+build-kernel: ustar-archive
 	env RUSTFLAGS="-C relocation-model=static -C link-args=-no-pie" \
 	cargo build -p kernel -Zbuild-std=core,alloc --target x86_64-polished-kernel.json $(if $(filter release,$(KERNEL_BUILD_DIR)),--release,)
 
@@ -47,7 +57,14 @@ fat: esp
 iso: fat
 	mkdir -p iso
 	cp $(FAT_IMG) iso/
-	xorriso -as mkisofs -R -f -e $(FAT_IMG) -no-emul-boot -o $(ISO_FILE) iso
+ifneq ($(USTAR),)
+ifeq ($(USTAR),1)
+	# archive.tar is created by ustar-archive target
+	# Do not copy archive.tar to iso/ when USTAR=1
+endif
+endif
+	xorriso -as mkisofs -R -f -o $(ISO_FILE) iso \
+		-e $(FAT_IMG) -no-emul-boot
 
 # QEMU targets
 # Default: graphical QEMU

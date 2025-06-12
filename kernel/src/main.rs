@@ -3,9 +3,11 @@
 
 extern crate alloc;
 
+use polished_bootloader::BootInfo;
+use polished_files::ustar::tar_lookup;
 use polished_interrupts::init_idt;
-use polished_memory as _;
-use polished_panic_handler as _; // Import the panic handler // Import the memory module for memset, memcpy, etc.
+use polished_memory as _; // Import the memory module for memset, memcpy, etc.
+use polished_panic_handler as _; // Import the panic handler.
 
 use alloc::format;
 use core::arch::{asm, naked_asm};
@@ -42,31 +44,35 @@ fn init_allocator() {
     }
 }
 
-fn log_framebuffer_info(fb_info_ptr: *const FramebufferInfo) {
-    if !fb_info_ptr.is_null() {
-        let fb = unsafe { &*fb_info_ptr };
-        let msg = format!(
-            "FramebufferInfo: address=0x{:x}, size={}, {}x{}, stride={}, format={:?}",
-            fb.address, fb.size, fb.width, fb.height, fb.stride, fb.format
-        );
-        info(&msg);
-    } else {
-        info("FramebufferInfo pointer is null");
-    }
+fn log_framebuffer_info(fb: &FramebufferInfo) {
+    let msg = format!(
+        "FramebufferInfo: address=0x{:x}, size={}, {}x{}, stride={}, format=RAW",
+        fb.address, fb.size, fb.width, fb.height, fb.stride
+    );
+    info(&msg);
 }
 
-fn clear_framebuffer(fb_info_ptr: *const FramebufferInfo) {
-    if !fb_info_ptr.is_null() {
-        let fb = unsafe { &mut *(fb_info_ptr as *mut FramebufferInfo) };
-        let buffer = unsafe { core::slice::from_raw_parts_mut(fb.address as *mut u8, fb.size) };
-        for byte in buffer.iter_mut() {
-            *byte = 0; // Fill with black
-        }
-        info("Framebuffer buffer filled with black");
-        framebuffer_x_demo(fb);
-    } else {
-        warn("FramebufferInfo pointer is null, cannot fill buffer");
+fn clear_framebuffer(fb: &FramebufferInfo) {
+    let buffer = unsafe { core::slice::from_raw_parts_mut(fb.address as *mut u8, fb.size) };
+    for byte in buffer.iter_mut() {
+        *byte = 0; // Fill with black
     }
+    info("Framebuffer buffer filled with black");
+    // Manually copy all fields, using a match for the format enum
+    let mut fb_mut = FramebufferInfo {
+        address: fb.address,
+        size: fb.size,
+        width: fb.width,
+        height: fb.height,
+        stride: fb.stride,
+        format: match fb.format {
+            polished_graphics::framebuffer::FramebufferFormat::Rgb => polished_graphics::framebuffer::FramebufferFormat::Rgb,
+            polished_graphics::framebuffer::FramebufferFormat::Bgr => polished_graphics::framebuffer::FramebufferFormat::Bgr,
+            polished_graphics::framebuffer::FramebufferFormat::Bitmask => polished_graphics::framebuffer::FramebufferFormat::Bitmask,
+            polished_graphics::framebuffer::FramebufferFormat::BltOnly => polished_graphics::framebuffer::FramebufferFormat::BltOnly,
+        },
+    };
+    framebuffer_x_demo(&mut fb_mut);
 }
 
 fn init_interrupts() {
@@ -79,16 +85,37 @@ fn init_interrupts() {
 /// This function must be called only as the kernel entry point, and the provided
 /// `fb_info_ptr` must be a valid pointer to a `FramebufferInfo` structure, or null.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn kernel_entry(fb_info_ptr: *const FramebufferInfo) -> ! {
+pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     init_allocator();
+    let boot_info = unsafe { &*boot_info_ptr };
+    let fb = if boot_info.framebuffer_bpp == 0 {
+        warn("BootInfo.framebuffer_bpp is zero! Defaulting stride to 0 to avoid division by zero.");
+        FramebufferInfo {
+            address: boot_info.framebuffer_addr,
+            size: (boot_info.framebuffer_pitch as usize) * (boot_info.framebuffer_height as usize),
+            width: boot_info.framebuffer_width as usize,
+            height: boot_info.framebuffer_height as usize,
+            stride: 0,
+            format: polished_graphics::framebuffer::FramebufferFormat::Rgb, // TODO: Use correct format if needed
+        }
+    } else {
+        FramebufferInfo {
+            address: boot_info.framebuffer_addr,
+            size: (boot_info.framebuffer_pitch as usize) * (boot_info.framebuffer_height as usize),
+            width: boot_info.framebuffer_width as usize,
+            height: boot_info.framebuffer_height as usize,
+            stride: boot_info.framebuffer_pitch as usize / (boot_info.framebuffer_bpp as usize / 8),
+            format: polished_graphics::framebuffer::FramebufferFormat::Rgb, // TODO: Use correct format if needed
+        }
+    };
     info("Hello from the kernel!");
     info("Initializing GDT...");
     polished_gdt::init_gdt();
     info("GDT initialized");
     init_interrupts();
     ps2_init();
-    log_framebuffer_info(fb_info_ptr);
-    clear_framebuffer(fb_info_ptr);
+    log_framebuffer_info(&fb);
+    clear_framebuffer(&fb);
     x86_64::instructions::interrupts::enable();
     // Only disable the PIC after confirming interrupts work, or comment out for now
     // info("Disabling legacy PIC...");
@@ -96,13 +123,37 @@ pub unsafe extern "C" fn kernel_entry(fb_info_ptr: *const FramebufferInfo) -> ! 
     // info("Legacy PIC disabled");
     // simulate_divide_by_zero();
 
+    let ustar_archive = include_bytes!("../../archive.tar");
+
+    // Example usage of the ustar module
+    let file = match tar_lookup(ustar_archive, "ustar-files/mymessage.txt") {
+        Some(file) => file,
+        None => {
+            warn("File not found in archive: mytext.txt");
+            (b"" as &[u8], 0)
+        }
+    };
+    info(&format!("Found file: mytext.txt, size: {}", file.1));
+    let file = match tar_lookup(ustar_archive, "ustar-files/hello_world.rs") {
+        Some(file) => file,
+        None => {
+            warn("File not found in archive: hello_world.rs");
+            (b"" as &[u8], 0)
+        }
+    };
+    info(&format!("Found file: hello_world.rs, size: {}", file.1));
+
+    // Print the contents of the file
+    let file_contents = core::str::from_utf8(file.0).expect("Invalid UTF-8 in file");
+    info(&format!("File contents:\n{file_contents}"));
+
     // Loop forever to keep the kernel running
     info("Kernel initialized successfully, entering main loop...");
     unsafe {
         asm!("sti");
     }
     loop {
-        unsafe { asm!("hlt") }; // Halt the CPU until the next interrupt
+        unsafe { asm!("pause; hlt") }; // Use PAUSE before HLT for better power efficiency
     }
 
     // panic!("Kernel halted");

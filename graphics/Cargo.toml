@@ -11,16 +11,8 @@ version = "0.1.0"
 crate-type = ["rlib"]
 
 [features]
-# The `uefi` feature is now non-default and must be enabled manually.
-uefi = ["dep:uefi"]
-
 default = []
 
 [dependencies]
 libm = "0.2.15"
 log = { workspace = true }
-uefi = { workspace = true, optional = true, features = [
-  "alloc",
-  "logger",
-  "panic_handler",
-] }

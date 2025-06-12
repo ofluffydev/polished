@@ -17,6 +17,8 @@
 
 // Library for loading files in no_std environments.
 
+// Only compile this module and export when the "uefi" feature is enabled
+#[cfg(feature = "uefi")]
 extern crate alloc;
 
 #[cfg(feature = "uefi")]
@@ -61,13 +63,9 @@ use uefi::{
 /// ```
 #[cfg(feature = "uefi")]
 pub fn read_file(path: &str) -> uefi::fs::FileSystemResult<alloc::vec::Vec<u8>> {
-    // Convert the UTF-8 path to a UEFI-compatible UTF-16 string
     let path: CString16 = CString16::try_from(path).unwrap();
-    // Obtain the Simple File System protocol for the current image
     let fs: ScopedProtocol<SimpleFileSystem> =
         boot::get_image_file_system(boot::image_handle()).unwrap();
-    // Wrap the protocol in a FileSystem abstraction
     let mut fs = FileSystem::new(fs);
-    // Read the file contents into a Vec<u8>
     fs.read(path.as_ref())
 }

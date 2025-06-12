@@ -11,14 +11,13 @@ version = "0.1.0"
 crate-type = ["rlib"]
 
 [features]
-uefi = ["dep:uefi"]
+uefi = ["dep:uefi", "dep:polished_graphics"]
 
 default = []
 
 [dependencies]
-polished_graphics = { version = "0.1.0", path = "../graphics", default-features = false }
-uefi = { workspace = true, optional = true, features = [
+polished_graphics = { version = "0.1.0", optional = true, path = "../graphics", default-features = false }
+uefi = { version = "0.35.0", optional = true, default-features = false, features = [
   "alloc",
   "logger",
-  "panic_handler",
 ] }

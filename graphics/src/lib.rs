@@ -12,6 +12,3 @@
 pub mod drawing;
 /// Framebuffer initialization and information structures.
 pub mod framebuffer;
-
-#[cfg(feature = "uefi")]
-pub use framebuffer::initialize_framebuffer;

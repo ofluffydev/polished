@@ -39,6 +39,7 @@ dependencies = [
  "lazy_static",
  "linked_list_allocator",
  "once_cell",
+ "polished_bootloader",
  "polished_elf_loader",
  "polished_files",
  "polished_gdt",
@@ -141,7 +142,6 @@ version = "0.1.0"
 dependencies = [
  "libm",
  "log",
- "uefi",
 ]
 
 [[package]]

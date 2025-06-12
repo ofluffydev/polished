@@ -10,6 +10,7 @@ version = "0.1.0"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 linked_list_allocator = "0.10.5"
 once_cell = { workspace = true }
+polished_bootloader = { path = "../bootloader", default-features = false }
 polished_elf_loader = { path = "../elf_loader", default-features = false }
 polished_files = { path = "../files", default-features = false }
 polished_gdt = { path = "../gdt" }

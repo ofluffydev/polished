@@ -9,16 +9,18 @@ version = "0.1.0"
 
 [dependencies]
 log = { workspace = true }
-polished_elf_loader = { version = "0.1.0", path = "../elf_loader", features = [
+polished_elf_loader = { version = "0.1.0", optional = true, path = "../elf_loader", features = [
   "uefi",
 ] }
-polished_files = { version = "0.1.0", path = "../files", features = ["uefi"] }
-polished_graphics = { version = "0.1.0", path = "../graphics", features = [
-  "uefi",
-] }
-uefi = { workspace = true, features = [
+polished_files = { path = "../files", optional = true, features = ["uefi"] }
+polished_graphics = { version = "0.1.0", path = "../graphics" }
+uefi = { version = "0.35.0", optional = true, features = [
   "alloc",
   "global_allocator",
   "logger",
   "panic_handler",
 ] }
+
+[features]
+default = ["uefi"]
+uefi = ["dep:uefi", "dep:polished_elf_loader", "dep:polished_files"]

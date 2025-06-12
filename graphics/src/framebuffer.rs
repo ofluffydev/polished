@@ -13,16 +13,7 @@
 //!
 //! This module provides a `FramebufferInfo` struct describing the framebuffer's location, size, and format, and a UEFI-specific function to initialize it.
 
-#[cfg(feature = "uefi")]
-use log::info;
-#[cfg(feature = "uefi")]
-use uefi::{
-    boot::{get_handle_for_protocol, open_protocol_exclusive},
-    proto::console::gop::{self, GraphicsOutput},
-};
-
 /// Information about the framebuffer's memory and display properties.
-#[cfg_attr(not(feature = "uefi"), allow(dead_code))]
 #[repr(C)]
 #[derive(Debug)]
 pub struct FramebufferInfo {
@@ -52,42 +43,4 @@ pub enum FramebufferFormat {
     Bitmask,
     /// Framebuffer only supports block transfers (no direct pixel access).
     BltOnly,
-}
-
-/// Initialize the framebuffer using UEFI's Graphics Output Protocol (GOP).
-///
-/// # Returns
-/// A `FramebufferInfo` struct describing the framebuffer's memory and display properties.
-///
-/// # Panics
-/// This function will panic if the GOP protocol cannot be accessed (should only be used in UEFI environments).
-#[cfg(feature = "uefi")]
-pub fn initialize_framebuffer() -> FramebufferInfo {
-    let gop_handle = get_handle_for_protocol::<GraphicsOutput>().unwrap();
-    let mut gop_protocol = open_protocol_exclusive::<GraphicsOutput>(gop_handle).unwrap();
-    let gop = gop_protocol.get_mut().unwrap();
-    let mode_info = gop.current_mode_info();
-    let resolution = mode_info.resolution();
-    let stride = mode_info.stride();
-    let pixel_format = mode_info.pixel_format();
-
-    let mut gop_buffer = gop.frame_buffer();
-    let gop_buffer_first_byte = gop_buffer.as_mut_ptr() as usize;
-
-    info!("Framebuffer address: 0x{gop_buffer_first_byte:x}");
-    info!("Framebuffer size: {} bytes", gop_buffer.size());
-
-    FramebufferInfo {
-        address: gop_buffer.as_mut_ptr() as u64,
-        size: gop_buffer.size(),
-        width: resolution.0,
-        height: resolution.1,
-        stride,
-        format: match pixel_format {
-            gop::PixelFormat::Rgb => FramebufferFormat::Rgb,
-            gop::PixelFormat::Bgr => FramebufferFormat::Bgr,
-            gop::PixelFormat::Bitmask => FramebufferFormat::Bitmask,
-            gop::PixelFormat::BltOnly => FramebufferFormat::BltOnly,
-        },
-    }
 }
