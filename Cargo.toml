@@ -15,6 +15,7 @@ members = [
   "memory",
   "x86_commands",
   "pci",
+  "virtio",
 ]
 resolver = "3"
 

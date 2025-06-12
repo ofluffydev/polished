@@ -3,23 +3,24 @@
 
 extern crate alloc;
 
+use alloc::format;
 use polished_bootloader::BootInfo;
-use polished_files::ustar::tar_lookup;
-use polished_interrupts::init_idt;
 use polished_memory as _; // Import the memory module for memset, memcpy, etc.
 use polished_panic_handler as _; // Import the panic handler.
 
-use alloc::format;
 use core::arch::{asm, naked_asm};
-use linked_list_allocator::LockedHeap;
-use polished_graphics::drawing::framebuffer_x_demo;
-use polished_graphics::framebuffer::FramebufferInfo;
-use polished_pci::pci_enumeration_demo;
+use polished_pci::{pci_config_read, print_pci_device};
 use polished_ps2::ps2_init;
-use polished_serial_logging::{info, warn};
+use polished_serial_logging::info;
 
-#[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::empty();
+mod allocator;
+pub mod demos;
+mod framebuffer_utils;
+mod interrupts;
+
+use crate::allocator::init_allocator;
+use crate::framebuffer_utils::{clear_framebuffer, log_framebuffer_info};
+use crate::interrupts::init_interrupts;
 
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
@@ -36,60 +37,6 @@ unsafe extern "C" fn naked_start() {
     );
 }
 
-fn init_allocator() {
-    let heap_start = 0x1000_0000; // Example heap start address
-    let heap_size = 0x0100_0000; // Example heap size (16 MB)
-
-    unsafe {
-        ALLOCATOR.lock().init(heap_start as *mut u8, heap_size);
-    }
-}
-
-fn log_framebuffer_info(fb: &FramebufferInfo) {
-    let msg = format!(
-        "FramebufferInfo: address=0x{:x}, size={}, {}x{}, stride={}, format=RAW",
-        fb.address, fb.size, fb.width, fb.height, fb.stride
-    );
-    info(&msg);
-}
-
-fn clear_framebuffer(fb: &FramebufferInfo) {
-    let buffer = unsafe { core::slice::from_raw_parts_mut(fb.address as *mut u8, fb.size) };
-    for byte in buffer.iter_mut() {
-        *byte = 0; // Fill with black
-    }
-    info("Framebuffer buffer filled with black");
-    // Manually copy all fields, using a match for the format enum
-    let mut fb_mut = FramebufferInfo {
-        address: fb.address,
-        size: fb.size,
-        width: fb.width,
-        height: fb.height,
-        stride: fb.stride,
-        format: match fb.format {
-            polished_graphics::framebuffer::FramebufferFormat::Rgb => {
-                polished_graphics::framebuffer::FramebufferFormat::Rgb
-            }
-            polished_graphics::framebuffer::FramebufferFormat::Bgr => {
-                polished_graphics::framebuffer::FramebufferFormat::Bgr
-            }
-            polished_graphics::framebuffer::FramebufferFormat::Bitmask => {
-                polished_graphics::framebuffer::FramebufferFormat::Bitmask
-            }
-            polished_graphics::framebuffer::FramebufferFormat::BltOnly => {
-                polished_graphics::framebuffer::FramebufferFormat::BltOnly
-            }
-        },
-    };
-    framebuffer_x_demo(&mut fb_mut);
-}
-
-fn init_interrupts() {
-    info("Loading IDT...");
-    init_idt();
-    info("IDT loaded");
-}
-
 /// # Safety
 /// This function must be called only as the kernel entry point, and the provided
 /// `fb_info_ptr` must be a valid pointer to a `FramebufferInfo` structure, or null.
@@ -97,26 +44,7 @@ fn init_interrupts() {
 pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     init_allocator();
     let boot_info = unsafe { &*boot_info_ptr };
-    let fb = if boot_info.framebuffer_bpp == 0 {
-        warn("BootInfo.framebuffer_bpp is zero! Defaulting stride to 0 to avoid division by zero.");
-        FramebufferInfo {
-            address: boot_info.framebuffer_addr,
-            size: (boot_info.framebuffer_pitch as usize) * (boot_info.framebuffer_height as usize),
-            width: boot_info.framebuffer_width as usize,
-            height: boot_info.framebuffer_height as usize,
-            stride: 0,
-            format: polished_graphics::framebuffer::FramebufferFormat::Rgb, // TODO: Use correct format if needed
-        }
-    } else {
-        FramebufferInfo {
-            address: boot_info.framebuffer_addr,
-            size: (boot_info.framebuffer_pitch as usize) * (boot_info.framebuffer_height as usize),
-            width: boot_info.framebuffer_width as usize,
-            height: boot_info.framebuffer_height as usize,
-            stride: boot_info.framebuffer_pitch as usize / (boot_info.framebuffer_bpp as usize / 8),
-            format: polished_graphics::framebuffer::FramebufferFormat::Rgb, // TODO: Use correct format if needed
-        }
-    };
+    let fb = crate::framebuffer_utils::make_framebuffer_info(boot_info);
     info("Hello from the kernel!");
     info("Initializing GDT...");
     polished_gdt::init_gdt();
@@ -133,31 +61,49 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     // simulate_divide_by_zero();
 
     let ustar_archive = include_bytes!("../../archive.tar");
+    crate::demos::demo_ustar_archive(ustar_archive);
 
-    // Example usage of the ustar module
-    let file = match tar_lookup(ustar_archive, "ustar-files/mymessage.txt") {
-        Some(file) => file,
-        None => {
-            warn("File not found in archive: mytext.txt");
-            (b"" as &[u8], 0)
+    let found_virtio = (0u8..32).find_map(|device| {
+        let vendor_id = unsafe { pci_config_read(0, device, 0, 0) & 0xFFFF } as u16;
+        if vendor_id == 0xFFFF {
+            return None;
         }
-    };
-    info(&format!("Found file: mytext.txt, size: {}", file.1));
-    let file = match tar_lookup(ustar_archive, "ustar-files/hello_world.rs") {
-        Some(file) => file,
-        None => {
-            warn("File not found in archive: hello_world.rs");
-            (b"" as &[u8], 0)
+        let device_id = ((unsafe { crate::pci_config_read(0, device, 0, 0) }) >> 16) as u16;
+        let class = ((unsafe { crate::pci_config_read(0, device, 0, 8) }) >> 24) as u8;
+        let subclass = ((unsafe { crate::pci_config_read(0, device, 0, 8) }) >> 16) as u8;
+        print_pci_device(0, device, vendor_id, device_id, class, subclass);
+        if vendor_id == 0x1AF4 && device_id == 0x1001 && class == 0x01 && subclass == 0x00 {
+            Some(polished_pci::PciDevice {
+                bus: 0,
+                device,
+                function: 0,
+                vendor_id,
+                device_id,
+                class,
+                subclass,
+                prog_if: ((unsafe { crate::pci_config_read(0, device, 0, 8) }) >> 8) as u8,
+                header_type: ((unsafe { crate::pci_config_read(0, device, 0, 0xC) }) >> 16) as u8,
+            })
+        } else {
+            None
         }
-    };
-    info(&format!("Found file: hello_world.rs, size: {}", file.1));
+    });
 
-    // Print the contents of the file
-    let file_contents = core::str::from_utf8(file.0).expect("Invalid UTF-8 in file");
-    info(&format!("File contents:\n{file_contents}"));
+    if let Some(virtio_device) = found_virtio {
+        info(&format!("Found VirtIO device: {virtio_device:?}"));
+        let virtio_device = polished_virtio::VirtioDevice::from(virtio_device);
+        // Just log the info about the VirtIO device
+        info(&format!("VirtIO device info: {virtio_device:?}"));
 
-    // Call PCI enumeration demo
-    pci_enumeration_demo();
+        // Initialize the VirtIO device
+        if let Err(e) = virtio_device.init() {
+            info(&format!("Failed to initialize VirtIO device: {:?}", e));
+        } else {
+            info("VirtIO device initialized successfully");
+        }
+    } else {
+        info("No VirtIO device found");
+    }
 
     // Loop forever to keep the kernel running
     info("Kernel initialized successfully, entering main loop...");

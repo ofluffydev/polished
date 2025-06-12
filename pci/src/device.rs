@@ -4,6 +4,8 @@
 // PCI (Peripheral Component Interconnect) is a standard for connecting peripherals to a computer's processor and memory.
 // Each PCI device is identified by a bus, device, and function number, and has associated vendor and device IDs.
 
+use core::fmt::Debug;
+
 use alloc::string::String; // Use heap-allocated strings from the alloc crate (common in no_std environments)
 
 /// Represents a single PCI device on the system.
@@ -37,7 +39,7 @@ pub struct PciDevice {
 
 // Implement the Debug trait for PciDevice so it can be printed with {:?} in debug output.
 // This is useful for logging and debugging during OS development.
-impl core::fmt::Debug for PciDevice {
+impl Debug for PciDevice {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,

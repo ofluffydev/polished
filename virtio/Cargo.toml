@@ -1,0 +1,10 @@
+[package]
+edition = "2024"
+name = "polished_virtio"
+version = "0.1.0"
+license = "Zlib"
+repository = "https://codeberg.org/ofluffydev/polished"
+description = "Polished VirtIO: A Rust library for VirtIO device emulation and management."
+
+[dependencies]
+polished_pci = { version = "0.2.1", path = "../pci" }

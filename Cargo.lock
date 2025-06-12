@@ -50,6 +50,7 @@ dependencies = [
  "polished_pci",
  "polished_ps2",
  "polished_serial_logging",
+ "polished_virtio",
  "x86_64",
 ]
 
@@ -194,6 +195,13 @@ dependencies = [
  "spin 0.10.0",
  "uart_16550",
  "x86_64",
+]
+
+[[package]]
+name = "polished_virtio"
+version = "0.1.0"
+dependencies = [
+ "polished_pci",
 ]
 
 [[package]]

@@ -1,8 +1,8 @@
 // PCI BAR (Base Address Register) handling for PCI devices
 // This module provides functions to probe and enumerate PCI BARs, which are used to map device memory or I/O regions.
 
-use alloc::vec::Vec;
 use crate::error::PciError;
+use alloc::vec::Vec;
 
 /// Information about a single PCI BAR (Base Address Register).
 ///
@@ -126,11 +126,7 @@ pub unsafe fn probe_bar(
 ///
 /// # Safety
 /// This function performs raw I/O port access and is unsafe.
-pub unsafe fn get_bars(
-    bus: u8,
-    device: u8,
-    function: u8,
-) -> Result<Vec<BarInfo>, PciError> {
+pub unsafe fn get_bars(bus: u8, device: u8, function: u8) -> Result<Vec<BarInfo>, PciError> {
     let mut bars = Vec::new();
     let mut i = 0;
     while i < 6 {

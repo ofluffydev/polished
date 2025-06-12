@@ -153,31 +153,31 @@ format:
 
 
 publish:
-	-cargo publish -p polished_bootloader --allow-dirty --target x86_64-unknown-uefi
-	-cargo publish -p polished_files --allow-dirty
-	-cargo publish -p polished_graphics --allow-dirty
-	-cargo publish -p polished_panic_handler --allow-dirty
-	-cargo publish -p polished_scancodes --allow-dirty
-	-cargo publish -p polished_elf_loader --allow-dirty
-	-cargo publish -p polished_gdt --allow-dirty
-	-cargo publish -p polished_interrupts --allow-dirty
-	-cargo publish -p polished_memory --allow-dirty
-	-cargo publish -p polished_ps2 --allow-dirty
-	-cargo publish -p polished_serial_logging --allow-dirty
-	-cargo publish -p polished_x86_commands --allow-dirty
-	-cargo publish -p polished_pci --allow-dirty
+	-cargo publish -p polished_bootloader     --allow-dirty --no-verify --target x86_64-unknown-uefi
+	-cargo publish -p polished_files          --allow-dirty --no-verify
+	-cargo publish -p polished_graphics       --allow-dirty --no-verify
+	-cargo publish -p polished_panic_handler  --allow-dirty --no-verify
+	-cargo publish -p polished_scancodes      --allow-dirty --no-verify
+	-cargo publish -p polished_elf_loader     --allow-dirty --no-verify
+	-cargo publish -p polished_gdt            --allow-dirty --no-verify
+	-cargo publish -p polished_interrupts     --allow-dirty --no-verify
+	-cargo publish -p polished_memory         --allow-dirty --no-verify
+	-cargo publish -p polished_ps2            --allow-dirty --no-verify
+	-cargo publish -p polished_serial_logging --allow-dirty --no-verify
+	-cargo publish -p polished_x86_commands   --allow-dirty --no-verify
+	-cargo publish -p polished_pci            --allow-dirty --no-verify
 
 publish-dry-run:
-	-cargo publish -p polished_bootloader --allow-dirty --dry-run --target x86_64-unknown-uefi
-	-cargo publish -p polished_files --allow-dirty --dry-run
-	-cargo publish -p polished_graphics --allow-dirty --dry-run
-	-cargo publish -p polished_panic_handler --allow-dirty --dry-run
-	-cargo publish -p polished_scancodes --allow-dirty --dry-run
-	-cargo publish -p polished_elf_loader --allow-dirty --dry-run
-	-cargo publish -p polished_gdt --allow-dirty --dry-run
-	-cargo publish -p polished_interrupts --allow-dirty --dry-run
-	-cargo publish -p polished_memory --allow-dirty --dry-run
-	-cargo publish -p polished_ps2 --allow-dirty --dry-run
+	-cargo publish -p polished_bootloader     --allow-dirty --dry-run --target x86_64-unknown-uefi
+	-cargo publish -p polished_files          --allow-dirty --dry-run
+	-cargo publish -p polished_graphics       --allow-dirty --dry-run
+	-cargo publish -p polished_panic_handler  --allow-dirty --dry-run
+	-cargo publish -p polished_scancodes      --allow-dirty --dry-run
+	-cargo publish -p polished_elf_loader     --allow-dirty --dry-run
+	-cargo publish -p polished_gdt            --allow-dirty --dry-run
+	-cargo publish -p polished_interrupts     --allow-dirty --dry-run
+	-cargo publish -p polished_memory         --allow-dirty --dry-run
+	-cargo publish -p polished_ps2            --allow-dirty --dry-run
 	-cargo publish -p polished_serial_logging --allow-dirty --dry-run
-	-cargo publish -p polished_x86_commands --allow-dirty --dry-run
-	-cargo publish -p polished_pci --allow-dirty --dry-run
+	-cargo publish -p polished_x86_commands   --allow-dirty --dry-run
+	-cargo publish -p polished_pci            --allow-dirty --dry-run
