@@ -3,7 +3,7 @@ description = "Low-level routines for initializing and managing PCI devices on x
 edition = "2024"
 license = "Zlib"
 name = "polished_pci"
-repository = "https://github.com/ofluffydev/polished"
+repository = "https://codeberg.org/ofluffydev/polished"
 version = "0.2.1"
 
 [lib]
@@ -17,4 +17,4 @@ polished_serial_logging = ["dep:polished_serial_logging"]
 
 [dependencies]
 log = { version = "0.4", optional = true }
-polished_serial_logging = { version = "0.1.0", path = "../serial_logging", default-features = false, optional = true }
+polished_serial_logging = { version = "0.1.1", path = "../serial_logging", default-features = false, optional = true }

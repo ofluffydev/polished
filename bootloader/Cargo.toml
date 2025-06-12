@@ -4,18 +4,18 @@ edition = "2024"
 license = "Zlib"
 name = "polished_bootloader"
 readme = "./README.md"
-repository = "https://github.com/ofluffydev/polished"
-version = "0.1.0"
+repository = "https://codeberg.org/ofluffydev/polished"
+version = "0.1.1"
 
 [dependencies]
 log = { workspace = true }
-polished_elf_loader = { version = "0.1.0", optional = true, path = "../elf_loader", features = [
+polished_elf_loader = { version = "0.1.1", optional = true, path = "../elf_loader", features = [
   "uefi",
 ] }
-polished_files = { version = "0.1.0", path = "../files", optional = true, features = [
+polished_files = { version = "0.1.1", path = "../files", optional = true, features = [
   "uefi",
 ] }
-polished_graphics = { version = "0.1.0", path = "../graphics" }
+polished_graphics = { version = "0.1.1", path = "../graphics" }
 uefi = { version = "0.35.0", optional = true, features = [
   "alloc",
   "global_allocator",

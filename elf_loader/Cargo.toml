@@ -4,8 +4,8 @@ edition = "2024"
 license = "Zlib"
 name = "polished_elf_loader"
 readme = "./README.md"
-repository = "https://github.com/ofluffydev/polished"
-version = "0.1.0"
+repository = "https://codeberg.org/ofluffydev/polished"
+version = "0.1.1"
 
 [lib]
 crate-type = ["rlib"]
@@ -17,8 +17,8 @@ default = []
 
 [dependencies]
 log = { workspace = true }
-polished_files = { version = "0.1.0", path = "../files", default-features = false }
-polished_graphics = { version = "0.1.0", path = "../graphics", default-features = false }
+polished_files = { version = "0.1.1", path = "../files", default-features = false }
+polished_graphics = { version = "0.1.1", path = "../graphics", default-features = false }
 uefi = { workspace = true, optional = true, features = [
   "alloc",
   "logger",
