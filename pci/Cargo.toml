@@ -1,0 +1,18 @@
+[package]
+description = "Low-level routines for initializing and managing PCI devices on x86 systems."
+edition = "2024"
+license = "Zlib"
+name = "polished_pci"
+repository = "https://github.com/ofluffydev/polished"
+version = "0.1.0"
+
+[lib]
+name = "polished_pci"
+path = "src/lib.rs"
+
+[features]
+default = ["polished_serial_logging"]
+polished_serial_logging = ["dep:polished_serial_logging"]
+
+[dependencies]
+polished_serial_logging = { version = "0.1.0", path = "../serial_logging", default-features = false, optional = true }

@@ -124,20 +124,22 @@ pub fn boot_system(kernel_path: &str) {
 
     // Determine bits per pixel based on framebuffer format (assume 32bpp for Rgb/Bgr/Bitmask, 0 for BltOnly)
     let (bpp, pitch) = match framebuffer_info.format {
-        polished_graphics::framebuffer::FramebufferFormat::Rgb |
-        polished_graphics::framebuffer::FramebufferFormat::Bgr |
-        polished_graphics::framebuffer::FramebufferFormat::Bitmask => (32u8, framebuffer_info.stride as u32 * 4),
+        polished_graphics::framebuffer::FramebufferFormat::Rgb
+        | polished_graphics::framebuffer::FramebufferFormat::Bgr
+        | polished_graphics::framebuffer::FramebufferFormat::Bitmask => {
+            (32u8, framebuffer_info.stride as u32 * 4)
+        }
         polished_graphics::framebuffer::FramebufferFormat::BltOnly => (0u8, 0u32),
     };
 
     // Construct BootInfo struct to pass to the kernel
     let boot_info = BootInfo {
-        memory_map_addr: 0, // TODO: Fill with real memory map address if needed
+        memory_map_addr: 0,    // TODO: Fill with real memory map address if needed
         memory_map_entries: 0, // TODO: Fill with real memory map entries if needed
-        initramfs_addr: 0, // TODO: Fill with real initramfs address if needed
-        initramfs_size: 0, // TODO: Fill with real initramfs size if needed
-        cmdline_addr: 0, // TODO: Fill with real cmdline address if needed
-        cmdline_len: 0, // TODO: Fill with real cmdline length if needed
+        initramfs_addr: 0,     // TODO: Fill with real initramfs address if needed
+        initramfs_size: 0,     // TODO: Fill with real initramfs size if needed
+        cmdline_addr: 0,       // TODO: Fill with real cmdline address if needed
+        cmdline_len: 0,        // TODO: Fill with real cmdline length if needed
         framebuffer_addr: framebuffer_info.address,
         framebuffer_width: framebuffer_info.width as u32,
         framebuffer_height: framebuffer_info.height as u32,
@@ -149,7 +151,10 @@ pub fn boot_system(kernel_path: &str) {
 
     // Pass pointer to BootInfo to the kernel
     let boot_info_ptr = &boot_info as *const BootInfo;
-    info!("Jumping to kernel entry point at 0x{entry_point:x} with BootInfo ptr: 0x{:x}", boot_info_ptr as usize);
+    info!(
+        "Jumping to kernel entry point at 0x{entry_point:x} with BootInfo ptr: 0x{:x}",
+        boot_info_ptr as usize
+    );
 
     unsafe {
         asm!(
@@ -194,7 +199,6 @@ pub fn uefi_init_with_greeting(greeting: &str) {
     info!("{greeting}");
     output.clear().expect("Failed to clear screen");
 }
-
 
 /// Initialize the framebuffer using UEFI's Graphics Output Protocol (GOP).
 ///

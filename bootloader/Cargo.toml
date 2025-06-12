@@ -12,7 +12,9 @@ log = { workspace = true }
 polished_elf_loader = { version = "0.1.0", optional = true, path = "../elf_loader", features = [
   "uefi",
 ] }
-polished_files = { path = "../files", optional = true, features = ["uefi"] }
+polished_files = { version = "0.1.0", path = "../files", optional = true, features = [
+  "uefi",
+] }
 polished_graphics = { version = "0.1.0", path = "../graphics" }
 uefi = { version = "0.35.0", optional = true, features = [
   "alloc",

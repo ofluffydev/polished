@@ -90,3 +90,72 @@ pub unsafe extern "C" fn memmove(dest: *mut u8, src: *const u8, count: usize) {
         }
     }
 }
+
+#[cfg(test)]
+extern crate std;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_memset() {
+        let mut buf = [0u8; 8];
+        unsafe { memset(buf.as_mut_ptr(), 0xAA, buf.len()) };
+        assert!(buf.iter().all(|&b| b == 0xAA));
+    }
+
+    #[test]
+    fn test_memcmp_equal() {
+        let a = [1u8, 2, 3, 4];
+        let b = [1u8, 2, 3, 4];
+        let res = unsafe { memcmp(a.as_ptr(), b.as_ptr(), a.len()) };
+        assert_eq!(res, 0);
+    }
+
+    #[test]
+    fn test_memcmp_unequal() {
+        let a = [1u8, 2, 3, 4];
+        let b = [1u8, 2, 4, 4];
+        let res = unsafe { memcmp(a.as_ptr(), b.as_ptr(), a.len()) };
+        assert!(res < 0);
+        let res2 = unsafe { memcmp(b.as_ptr(), a.as_ptr(), a.len()) };
+        assert!(res2 > 0);
+    }
+
+    #[test]
+    fn test_memcpy() {
+        let src = [1u8, 2, 3, 4, 5];
+        let mut dest = [0u8; 5];
+        unsafe { memcpy(dest.as_mut_ptr(), src.as_ptr(), src.len()) };
+        assert_eq!(src, dest);
+    }
+
+    #[test]
+    fn test_memmove_nonoverlapping() {
+        let src = [10u8, 20, 30, 40];
+        let mut dest = [0u8; 4];
+        unsafe { memmove(dest.as_mut_ptr(), src.as_ptr(), src.len()) };
+        assert_eq!(src, dest);
+    }
+
+    #[test]
+    fn test_memmove_overlapping_forward() {
+        // Move bytes forward in the same buffer
+        let mut buf = [1u8, 2, 3, 4, 5];
+        let src = buf.as_ptr();
+        let dest = unsafe { buf.as_mut_ptr().add(2) };
+        unsafe { memmove(dest, src, 3) };
+        assert_eq!(buf, [1, 2, 1, 2, 3]);
+    }
+
+    #[test]
+    fn test_memmove_overlapping_backward() {
+        // Move bytes backward in the same buffer
+        let mut buf = [1u8, 2, 3, 4, 5];
+        let src = unsafe { buf.as_ptr().add(2) };
+        let dest = buf.as_mut_ptr();
+        unsafe { memmove(dest, src, 3) };
+        assert_eq!(buf, [3, 4, 5, 4, 5]);
+    }
+}

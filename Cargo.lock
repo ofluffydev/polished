@@ -47,6 +47,7 @@ dependencies = [
  "polished_interrupts",
  "polished_memory",
  "polished_panic_handler",
+ "polished_pci",
  "polished_ps2",
  "polished_serial_logging",
  "x86_64",
@@ -157,10 +158,17 @@ dependencies = [
 
 [[package]]
 name = "polished_memory"
-version = "0.1.0"
+version = "1.0.0"
 
 [[package]]
 name = "polished_panic_handler"
+version = "0.1.0"
+dependencies = [
+ "polished_serial_logging",
+]
+
+[[package]]
+name = "polished_pci"
 version = "0.1.0"
 dependencies = [
  "polished_serial_logging",

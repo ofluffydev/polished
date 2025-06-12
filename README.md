@@ -113,11 +113,37 @@ ______________________________________________________________________
 - [x] ELF kernel loading
 - [x] Custom heap allocator
 - [x] Serial logging
-- [ ] Basic filesystem support
+- [ ] VirtIO block device support (requires PCI enumerator and VirtIO block driver)
+  - [ ] PCI device enumeration (detect VirtIO PCI devices, vendor ID 0x1AF4)
+  - [ ] Map PCI BARs for MMIO register access
+  - [ ] Implement Virtqueue structures for I/O
+  - [ ] VirtIO block driver (spec v1.1+)
+  - [ ] Documentation: What is VirtIO? (Paravirtualized device interface for efficient I/O)
+- [ ] Complex filesystem support
+  - [ ] ext2 filesystem driver
+  - [ ] ext3 filesystem driver
+  - [ ] ext4 filesystem driver
+  - [ ] Support for additional filesystems (FAT, ISO9660, etc.)
+  - [ ] Experimental Btrfs support (long-term goal)
+  - [ ] Unified VFS layer and mount system
 - [ ] libc and POSIX compatibility
+  - [ ] Implement libc and POSIX syscalls with a focus on safety and optimization by default
+  - [ ] Provide a modern, safe, and efficient system call interface
+  - [ ] Compatibility layer for existing POSIX software
 - [ ] Userland process support
+  - [ ] Process creation and management (fork/exec)
+  - [ ] User/kernel privilege separation
+  - [ ] Inter-process communication (IPC)
+  - [ ] Signals and process control
 - [ ] Networking
+  - [ ] Full wired (Ethernet) network stack
+  - [ ] Full WiFi (802.11) network stack
+  - [ ] TCP/IP, UDP, and socket API
+  - [ ] DHCP, DNS, and common network protocols
 - [ ] Graphical interface
+  - [ ] Compositor for window management and rendering
+  - [ ] Basic windowing system and GUI toolkit
+  - [ ] Hardware-accelerated graphics (future)
 
 ______________________________________________________________________
 

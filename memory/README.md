@@ -2,6 +2,8 @@
 
 **Polished Memory** is a Rust library providing fundamental memory manipulation routines—`memset`, `memcmp`, `memcpy`, and `memmove`—for use in `no_std` environments such as kernels, bootloaders, or embedded systems. It is a core component of the Polished OS project, ensuring that essential low-level memory operations are available even when the Rust standard library is not.
 
+**Version 1.0.0 and above:** This crate is considered stable and safe for production use. The API will not change in a breaking way without a major version bump.
+
 ______________________________________________________________________
 
 ## What Does This Library Do?

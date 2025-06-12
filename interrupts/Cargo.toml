@@ -1,4 +1,5 @@
 [package]
+description = "Interrupt handling for the Polished OS project."
 edition = "2024"
 license = "Zlib"
 name = "polished_interrupts"
@@ -9,6 +10,6 @@ version = "0.1.0"
 [dependencies]
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 once_cell = { workspace = true }
-polished_scancodes = { path = "../scancodes" }
-polished_serial_logging = { path = "../serial_logging" }
+polished_scancodes = { version = "0.1.0", path = "../scancodes" }
+polished_serial_logging = { version = "0.1.0", path = "../serial_logging" }
 x86_64 = "0.15.2"

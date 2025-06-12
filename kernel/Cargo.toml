@@ -18,6 +18,7 @@ polished_graphics = { path = "../graphics", default-features = false }
 polished_interrupts = { path = "../interrupts" }
 polished_memory = { path = "../memory" }
 polished_panic_handler = { path = "../panic_handler" }
+polished_pci = { path = "../pci" }
 polished_ps2 = { path = "../ps2" }
 polished_serial_logging = { path = "../serial_logging" }
 x86_64 = { workspace = true }

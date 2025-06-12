@@ -1,4 +1,5 @@
 [package]
+description = "Low-level routines for initializing and managing the PS/2 controller and keyboard on x86 systems."
 edition = "2024"
 license = "Zlib"
 name = "polished_ps2"

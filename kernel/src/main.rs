@@ -14,6 +14,7 @@ use core::arch::{asm, naked_asm};
 use linked_list_allocator::LockedHeap;
 use polished_graphics::drawing::framebuffer_x_demo;
 use polished_graphics::framebuffer::FramebufferInfo;
+use polished_pci::pci_enumeration_demo;
 use polished_ps2::ps2_init;
 use polished_serial_logging::{info, warn};
 
@@ -66,10 +67,18 @@ fn clear_framebuffer(fb: &FramebufferInfo) {
         height: fb.height,
         stride: fb.stride,
         format: match fb.format {
-            polished_graphics::framebuffer::FramebufferFormat::Rgb => polished_graphics::framebuffer::FramebufferFormat::Rgb,
-            polished_graphics::framebuffer::FramebufferFormat::Bgr => polished_graphics::framebuffer::FramebufferFormat::Bgr,
-            polished_graphics::framebuffer::FramebufferFormat::Bitmask => polished_graphics::framebuffer::FramebufferFormat::Bitmask,
-            polished_graphics::framebuffer::FramebufferFormat::BltOnly => polished_graphics::framebuffer::FramebufferFormat::BltOnly,
+            polished_graphics::framebuffer::FramebufferFormat::Rgb => {
+                polished_graphics::framebuffer::FramebufferFormat::Rgb
+            }
+            polished_graphics::framebuffer::FramebufferFormat::Bgr => {
+                polished_graphics::framebuffer::FramebufferFormat::Bgr
+            }
+            polished_graphics::framebuffer::FramebufferFormat::Bitmask => {
+                polished_graphics::framebuffer::FramebufferFormat::Bitmask
+            }
+            polished_graphics::framebuffer::FramebufferFormat::BltOnly => {
+                polished_graphics::framebuffer::FramebufferFormat::BltOnly
+            }
         },
     };
     framebuffer_x_demo(&mut fb_mut);
@@ -146,6 +155,9 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     // Print the contents of the file
     let file_contents = core::str::from_utf8(file.0).expect("Invalid UTF-8 in file");
     info(&format!("File contents:\n{file_contents}"));
+
+    // Call PCI enumeration demo
+    pci_enumeration_demo();
 
     // Loop forever to keep the kernel running
     info("Kernel initialized successfully, entering main loop...");

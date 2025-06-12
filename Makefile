@@ -68,37 +68,41 @@ endif
 
 # QEMU targets
 # Default: graphical QEMU
-qemu: iso
+qemu: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
+		-drive file=disk.img,if=virtio,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot
 
 # Headless (no graphical output)
-qemu-nographic: iso
+qemu-nographic: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
+		-drive file=disk.img,if=virtio,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-nographic
 
 # QEMU with GDB stub (graphical)
-qemu-gdb: iso
+qemu-gdb: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
+		-drive file=disk.img,if=virtio,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot \
 		-s -S \
 		-d unimp,guest_errors
 
 # QEMU with GDB stub and no graphics
-qemu-gdb-nographic: iso
+qemu-gdb-nographic: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
+		-drive file=disk.img,if=virtio,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-nographic \
@@ -106,22 +110,28 @@ qemu-gdb-nographic: iso
 		-d unimp,guest_errors
 
 # QEMU with extra debug output (interrupts)
-qemu-debug: iso
+qemu-debug: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
+		-drive file=disk.img,if=virtio,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-d int
 
-qemu-debug-nographic: iso
+qemu-debug-nographic: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
+		-drive file=disk.img,if=virtio,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-nographic \
 		-d int
+
+# Create a virtio disk image
+disk:
+	qemu-img create -f raw disk.img 64M
 
 rust-clean:
 	cd kernel && cargo clean
@@ -143,7 +153,7 @@ format:
 
 
 publish:
-	-cargo publish -p polished_bootloader --allow-dirty
+	-cargo publish -p polished_bootloader --allow-dirty --target x86_64-unknown-uefi
 	-cargo publish -p polished_files --allow-dirty
 	-cargo publish -p polished_graphics --allow-dirty
 	-cargo publish -p polished_panic_handler --allow-dirty
@@ -155,3 +165,19 @@ publish:
 	-cargo publish -p polished_ps2 --allow-dirty
 	-cargo publish -p polished_serial_logging --allow-dirty
 	-cargo publish -p polished_x86_commands --allow-dirty
+	-cargo publish -p polished_pci --allow-dirty
+
+publish-dry-run:
+	-cargo publish -p polished_bootloader --allow-dirty --dry-run --target x86_64-unknown-uefi
+	-cargo publish -p polished_files --allow-dirty --dry-run
+	-cargo publish -p polished_graphics --allow-dirty --dry-run
+	-cargo publish -p polished_panic_handler --allow-dirty --dry-run
+	-cargo publish -p polished_scancodes --allow-dirty --dry-run
+	-cargo publish -p polished_elf_loader --allow-dirty --dry-run
+	-cargo publish -p polished_gdt --allow-dirty --dry-run
+	-cargo publish -p polished_interrupts --allow-dirty --dry-run
+	-cargo publish -p polished_memory --allow-dirty --dry-run
+	-cargo publish -p polished_ps2 --allow-dirty --dry-run
+	-cargo publish -p polished_serial_logging --allow-dirty --dry-run
+	-cargo publish -p polished_x86_commands --allow-dirty --dry-run
+	-cargo publish -p polished_pci --allow-dirty --dry-run
