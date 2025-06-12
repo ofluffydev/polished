@@ -1,7 +1,5 @@
 # PCI Bus Access and Enumeration Library (`polished_pci`)
 
-> **Note:** This is an early version of the `polished_pci` crate. The long-term goal is to provide a drop-in, robust PCI access and enumeration solution for x86 kernel and OS development in Rust.
-
 This crate provides low-level routines for accessing and enumerating PCI devices on x86 systems. It is designed for use in operating system kernels or bootloaders written in Rust, where direct hardware access is required. `polished_pci` is a core component of the [Polished OS](../README.md) project, enabling device discovery and initialization for modern and legacy hardware.
 
 ______________________________________________________________________
@@ -28,6 +26,8 @@ ______________________________________________________________________
 - **Device Information Logging:** Print human-readable information about each detected device using the `serial_logging` crate (or a no-op logger if disabled).
 - **Vendor/Class Decoding:** Recognize common vendor IDs (Intel, NVIDIA, QEMU, VirtIO) and class codes for easier debugging.
 - **No-Std Compatible:** Designed for use in `no_std` environments such as kernels and bootloaders.
+- **Integration Examples:** See the crate documentation for kernel-level initialization, dumping all PCI devices, and finding network devices.
+- **Unit Tests:** Pure functions and struct formatting are covered by unit tests (see source).
 
 ______________________________________________________________________
 
@@ -88,6 +88,17 @@ fn main() {
 
 ______________________________________________________________________
 
+## Documentation
+
+For detailed API documentation, integration examples, and usage notes, **see the crate-level documentation** (e.g., run `cargo doc --open` or view the [docs.rs page](https://docs.rs/polished_pci) if published). The documentation includes:
+
+- Kernel-level initialization example
+- Dumping all PCI devices
+- Finding the first network device
+- API details for all public functions and types
+
+______________________________________________________________________
+
 ## Implementation Details
 
 - **Port I/O:** Uses inline assembly (`core::arch::asm!`) for `inl` and `outl` operations to access PCI configuration space.
@@ -95,6 +106,7 @@ ______________________________________________________________________
 - **Device Detection:** Checks for valid vendor IDs (0xFFFF means no device present).
 - **Logging:** Uses the `serial_logging` crate to log device information, or a no-op logger if the feature is disabled.
 - **No-Std:** Uses `#![no_std]` and the `alloc` crate for string formatting.
+- **Unit Testing:** Pure functions and struct formatting are covered by unit tests in the source.
 
 ______________________________________________________________________
 
