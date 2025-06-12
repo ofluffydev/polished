@@ -12,8 +12,8 @@
 
 ### Struct-Based Device Model
 
-- [ ] Define a `PciDevice` struct with fields: `bus`, `device`, `function`, `vendor_id`, `device_id`, `class`, `subclass`, `prog_if`, `header_type`.
-- [ ] Provide `impl core::fmt::Debug` and a printable summary.
+- [x] Define a `PciDevice` struct with fields: `bus`, `device`, `function`, `vendor_id`, `device_id`, `class`, `subclass`, `prog_if`, `header_type`.
+- [x] Provide `impl core::fmt::Debug` and a printable summary.
 
 ______________________________________________________________________
 
@@ -21,13 +21,13 @@ ______________________________________________________________________
 
 ### Configuration Space Read/Write
 
-- [ ] Add `read_config_u8`, `read_config_u16`, `read_config_u32` (and `write_*` variants).
-- [ ] Use those to clean up decoding logic.
+- [x] Add `read_config_u8`, `read_config_u16`, `read_config_u32` (and `write_*` variants).
+- [x] Use those to clean up decoding logic.
 
 ### BAR (Base Address Registers) Parsing
 
-- [ ] Add support for reading and interpreting device BARs (I/O vs MMIO, 32 vs 64-bit).
-- [ ] Return size and type via probe by writing 0xFFFFFFFF and reading back.
+- [x] Add support for reading and interpreting device BARs (I/O vs MMIO, 32 vs 64-bit).
+- [x] Return size and type via probe by writing 0xFFFFFFFF and reading back.
 
 ______________________________________________________________________
 
@@ -35,12 +35,11 @@ ______________________________________________________________________
 
 ### Better Vendor/Class Decoding
 
-- [ ] Use `phf` or `match` tables to print known class and vendor names.
-- [ ] Allow optional integration with `polished_hwdb` crate (shared vendor/class database).
+- [x] Use `phf` or `match` tables to print known class and vendor names.
 
 ### Configurable Logging
 
-- [ ] Abstract logger: define a `Logger` trait and use generics or feature flags to support:
+- [x] Abstract logger: define a `Logger` trait and use generics or feature flags to support:
   - `serial_logging`
   - `log` crate (in hosted/tested environments)
   - No-op for silence
@@ -51,13 +50,13 @@ ______________________________________________________________________
 
 ### Safe Public API
 
-- [ ] Expose a safe API for scanning and getting a list of `PciDevice` entries.
-- [ ] Keep unsafe internals well-documented and minimal.
+- [x] Expose a safe API for scanning and getting a list of `PciDevice` entries.
+- [x] Keep unsafe internals well-documented and minimal.
 
 ### Error Handling
 
-- [ ] Introduce `Result` types for device reads and enumeration.
-- [ ] Define errors: e.g., `DeviceNotFound`, `InvalidOffset`, `IoFailure`.
+- [x] Introduce `Result` types for device reads and enumeration.
+- [x] Define errors: e.g., `DeviceNotFound`, `InvalidOffset`, `IoFailure`.
 
 ______________________________________________________________________
 
@@ -65,13 +64,13 @@ ______________________________________________________________________
 
 ### Feature Flags and Optional Deps
 
-- [ ] Add a `logger` feature that enables `serial_logging`, off by default.
+- [x] Add a `logger` feature that enables `serial_logging`, off by default.
 - [ ] Add a `decode_names` feature to enable lookup tables for vendor/class.
 
 ### Docs & Examples
 
-- [ ] Improve `lib.rs` with module-level docs showing the full usage flow.
-- [ ] Provide integration examples for:
+- [x] Improve `lib.rs` with module-level docs showing the full usage flow.
+- [x] Provide integration examples for:
   - Kernel-level init
   - Dumping all PCI devices
   - Finding first network device
@@ -87,6 +86,14 @@ ______________________________________________________________________
 ### ECAM Support (Modern PCIe)
 
 - [ ] Abstract PCI config access to support both legacy I/O (0xCF8/CFC) and memory-mapped ECAM.
+
+### PCI Hotswap Support
+
+- [ ] Add support for PCI hotswap (hot-plug/hot-remove) detection and handling.
+
+### BAR#n Support
+
+- [ ] Add support for accessing and parsing all BARs (BAR0–BAR5) individually, not just as a group.
 
 ### Thread-Safety Option (optional)
 

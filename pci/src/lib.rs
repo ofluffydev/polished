@@ -13,193 +13,156 @@
 //! use polished_pci::pci_enumeration_demo;
 //! pci_enumeration_demo();
 //! ```
+//!
+//! # Integration Examples
+//!
+//! ## Kernel-level Initialization
+//!
+//! ```no_run
+//! // In your kernel's main.rs or init.rs
+//! use polished_pci::pci_enumeration_demo;
+//! // Initialize and enumerate PCI devices (prints to serial logger)
+//! pci_enumeration_demo();
+//! ```
+//!
+//! ## Dumping All PCI Devices
+//!
+//! ```no_run
+//! use polished_pci::scan_bus0_devices;
+//! use polished_pci::print_pci_device;
+//!
+//! // Scan all devices on bus 0
+//! let devices = scan_bus0_devices();
+//! for dev in devices.iter() {
+//!     print_pci_device(dev);
+//! }
+//! ```
+//!
+//! ## Finding the First Network Device
+//!
+//! ```no_run
+//! use polished_pci::{scan_bus0_devices, PciDevice, class_code_str};
+//!
+//! // Scan all devices on bus 0
+//! let devices = scan_bus0_devices();
+//! // Class code 0x02 is for network controllers
+//! let net_dev = devices.iter().find(|dev| dev.class_code == 0x02);
+//! if let Some(dev) = net_dev {
+//!     // Do something with the network device
+//!     // e.g., print info or initialize driver
+//! }
+//! ```
 
-#![no_std]
+#![no_std] // Do not link the Rust standard library. Required for OS/embedded development.
 
-extern crate alloc;
+extern crate alloc; // Import the alloc crate for heap-allocated types (e.g., String, Vec)
 
-#[cfg(feature = "polished_serial_logging")]
-use polished_serial_logging::info;
+// --- Module Declarations ---
+// Each module below provides a logical grouping of PCI-related functionality.
+// These are split into separate files for clarity and maintainability.
 
-#[cfg(not(feature = "polished_serial_logging"))]
-use core::arch::asm;
-// If the polished_serial_logging feature is not enabled, define a no-op info function
-#[cfg(not(feature = "polished_serial_logging"))]
-fn info(_msg: &str) {
-    unsafe {
-        asm!(
-            "nop", // No-op to avoid unused function warning
-        );
-    }
-}
+pub mod bar; // Base Address Register (BAR) handling
+pub mod config; // PCI configuration space access (read/write)
+pub mod device; // PCI device struct and helpers
+pub mod error; // Error types for PCI operations
+pub mod lookup; // Lookup tables for vendor/class names
+pub mod scan; // PCI bus scanning and enumeration routines
 
-/// I/O port for PCI configuration address
-const PCI_CONFIG_ADDRESS: u16 = 0xCF8;
-/// I/O port for PCI configuration data
-const PCI_CONFIG_DATA: u16 = 0xCFC;
+mod logger; // Logging interface (e.g., serial output)
 
-/// Read a 32-bit value from PCI configuration space.
-///
-/// # Safety
-/// This function performs raw I/O port access and is unsafe.
-///
-/// # Arguments
-/// * `bus` - PCI bus number (0-255)
-/// * `device` - PCI device number (0-31)
-/// * `function` - PCI function number (0-7)
-/// * `offset` - Register offset (must be 4-byte aligned)
-unsafe fn pci_config_read(bus: u8, device: u8, function: u8, offset: u8) -> u32 {
-    let address = (1u32 << 31)
-        | ((bus as u32) << 16)
-        | ((device as u32) << 11)
-        | ((function as u32) << 8)
-        | ((offset as u32) & 0xFC);
-    // Write address to PCI_CONFIG_ADDRESS port
-    unsafe {
-        outl(PCI_CONFIG_ADDRESS, address);
-    }
-    // Read data from PCI_CONFIG_DATA port
-    unsafe { inl(PCI_CONFIG_DATA) }
-}
+// --- Re-exports ---
+// These 'pub use' statements make selected types and functions available at the crate root.
+// This allows users to write `use polished_pci::PciDevice;` instead of `use polished_pci::device::PciDevice;`
 
-/// Write a 32-bit value to an I/O port.
-///
-/// # Safety
-/// This function uses inline assembly to access hardware ports.
-unsafe fn outl(port: u16, val: u32) {
-    unsafe {
-        core::arch::asm!("out dx, eax", in("dx") port, in("eax") val);
-    }
-}
+pub use bar::{BarInfo, get_bars, probe_bar}; // now return Result types
+pub use config::{
+    pci_config_read, read_config_u8, read_config_u16, read_config_u32, write_config_u8,
+    write_config_u16, write_config_u32,
+};
+pub use device::PciDevice;
+pub use error::PciError;
+pub use lookup::{class_code_str, subclass_str, vendor_id_str};
+pub use scan::{pci_enumeration_demo, print_pci_device, scan_bus0_devices};
 
-/// Read a 32-bit value from an I/O port.
-///
-/// # Safety
-/// This function uses inline assembly to access hardware ports.
-unsafe fn inl(port: u16) -> u32 {
-    let val: u32;
-    unsafe {
-        core::arch::asm!("in eax, dx", in("dx") port, out("eax") val);
-    }
-    val
-}
+// --- Utility Functions ---
+// These are simple helpers for formatting PCI bus/device numbers as strings.
+// They are not part of the public API, but are used internally for display/logging.
 
-/// Enumerate all PCI devices on bus 0 and print their information.
-///
-/// This function scans all 32 possible devices on PCI bus 0, reads their vendor and device IDs,
-/// and prints information about each present device using the serial logger.
-///
-/// # Example
-/// ```no_run
-/// use polished_pci::pci_enumeration_demo;
-/// pci_enumeration_demo();
-/// ```
-pub fn pci_enumeration_demo() {
-    info("PCI enumeration: Scanning bus 0...");
-    for device in 0u8..32 {
-        // Read vendor ID (0xFFFF means no device present)
-        let vendor_id = unsafe { pci_config_read(0, device, 0, 0) & 0xFFFF } as u16;
-        if vendor_id == 0xFFFF {
-            continue; // No device present
-        }
-        // Read device ID, class code, and subclass
-        let device_id = ((unsafe { pci_config_read(0, device, 0, 0) }) >> 16) as u16;
-        let class_code = ((unsafe { pci_config_read(0, device, 0, 8) }) >> 24) as u8;
-        let subclass = ((unsafe { pci_config_read(0, device, 0, 8) }) >> 16) as u8;
-        print_pci_device(0, device, vendor_id, device_id, class_code, subclass);
-    }
-}
+use alloc::string::String;
 
-/// Print information about a PCI device.
-///
-/// This function prints each field of the PCI device as a separate line using the serial logger.
-/// It provides human-readable names for common vendor and class codes.
-fn print_pci_device(
-    bus: u8,
-    device: u8,
-    vendor_id: u16,
-    device_id: u16,
-    class_code: u8,
-    subclass: u8,
-) {
-    info("PCI device found:");
-    info(&format_bus(bus));
-    info(&format_device(device));
-    info(match vendor_id {
-        0x8086 => "  vendor=0x8086 (Intel)",
-        0x10DE => "  vendor=0x10DE (NVIDIA)",
-        0x1234 => "  vendor=0x1234 (QEMU)",
-        0x1AF4 => "  vendor=0x1AF4 (Red Hat / QEMU (VirtIO))",
-        _ => "  vendor=unknown",
-    });
-    {
-        // Print device_id as a hex string
-        use core::fmt::Write;
-        struct Buffer {
-            buf: [u8; 32],
-            pos: usize,
-        }
-        impl core::fmt::Write for Buffer {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                let bytes = s.as_bytes();
-                let len = bytes.len().min(self.buf.len() - self.pos);
-                self.buf[self.pos..self.pos + len].copy_from_slice(&bytes[..len]);
-                self.pos += len;
-                Ok(())
-            }
-        }
-        let mut buffer = Buffer {
-            buf: [0u8; 32],
-            pos: 0,
-        };
-        let _ = write!(&mut buffer, "  device_id=0x{device_id:04X}");
-        let s = core::str::from_utf8(&buffer.buf[..buffer.pos]).unwrap_or("  device_id=?");
-        info(s);
-    }
-    info(match class_code {
-        0x01 => "  class=0x01 (Mass Storage Controller)",
-        0x02 => "  class=0x02 (Network Controller)",
-        0x03 => "  class=0x03 (Display Controller)",
-        0x06 => "  class=0x06 (Bridge Device)",
-        _ => "  class=other",
-    });
-    info(match subclass {
-        0x00 => "  subclass=0x00",
-        0x01 => "  subclass=0x01",
-        0x02 => "  subclass=0x02",
-        0x03 => "  subclass=0x03",
-        0x04 => "  subclass=0x04",
-        0x05 => "  subclass=0x05",
-        0x06 => "  subclass=0x06",
-        0x80 => "  subclass=0x80 (Other)",
-        _ => "  subclass=other",
-    });
-}
-
-/// Format the bus number for display.
-///
-/// # Arguments
-/// * `bus` - PCI bus number
-///
-/// # Returns
-/// A string like "  bus=0".
-fn format_bus(bus: u8) -> alloc::string::String {
+/// Format a PCI bus number as a string for display/logging.
+/// Example: format_bus(2) -> "  bus=2"
+fn format_bus(bus: u8) -> String {
     use alloc::string::ToString;
     let mut s = "  bus=".to_string();
     s.push_str(&bus.to_string());
     s
 }
 
-/// Format the device number for display.
-///
-/// # Arguments
-/// * `device` - PCI device number
-///
-/// # Returns
-/// A string like "  device=5".
-fn format_device(device: u8) -> alloc::string::String {
+/// Format a PCI device number as a string for display/logging.
+/// Example: format_device(5) -> "  device=5"
+fn format_device(device: u8) -> String {
     use alloc::string::ToString;
     let mut s = "  device=".to_string();
     s.push_str(&device.to_string());
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pci_device_summary() {
+        let dev = PciDevice {
+            bus: 0,
+            device: 1,
+            function: 0,
+            vendor_id: 0x8086,
+            device_id: 0x1234,
+            class: 0x02,
+            subclass: 0x00,
+            prog_if: 0x00,
+            header_type: 0x00,
+        };
+        let summary = dev.summary();
+        assert!(summary.contains("PCI 00:01.0"));
+        assert!(summary.contains("vendor=8086"));
+        assert!(summary.contains("device=1234"));
+        assert!(summary.contains("class=02"));
+        assert!(summary.contains("subclass=00"));
+    }
+
+    #[test]
+    fn test_vendor_id_str() {
+        assert!(vendor_id_str(0x8086).contains("Intel"));
+        assert!(vendor_id_str(0x10DE).contains("NVIDIA"));
+        assert_eq!(vendor_id_str(0xFFFF), "  vendor=unknown");
+    }
+
+    #[test]
+    fn test_class_code_str() {
+        assert!(class_code_str(0x01).contains("Mass Storage"));
+        assert!(class_code_str(0x02).contains("Network"));
+        assert_eq!(class_code_str(0xFF), "  class=other");
+    }
+
+    #[test]
+    fn test_subclass_str() {
+        assert!(subclass_str(0x80).contains("Other"));
+        assert_eq!(subclass_str(0x05), "  subclass=0x05");
+        assert_eq!(subclass_str(0xFF), "  subclass=other");
+    }
+
+    #[test]
+    fn test_pci_error_eq() {
+        assert_eq!(PciError::DeviceNotFound, PciError::DeviceNotFound);
+        assert_ne!(PciError::DeviceNotFound, PciError::IoFailure);
+    }
+
+    #[test]
+    fn test_format_bus_and_device() {
+        assert_eq!(format_bus(2), "  bus=2");
+        assert_eq!(format_device(5), "  device=5");
+    }
 }

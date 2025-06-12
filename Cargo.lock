@@ -169,8 +169,9 @@ dependencies = [
 
 [[package]]
 name = "polished_pci"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "log",
  "polished_serial_logging",
 ]
 
