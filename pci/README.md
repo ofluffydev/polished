@@ -17,6 +17,8 @@ The `polished_pci` library offers safe(ish) Rust abstractions over the raw I/O p
 
 All hardware access is performed in `unsafe` blocks, as is required for direct port I/O on x86 hardware.
 
+For current features and todo items, see the [TODO.md](TODO.md) file.
+
 ______________________________________________________________________
 
 ## Features
