@@ -104,13 +104,15 @@ See `src/frame.rs` for implementation details and tests.
 - **Slab/pool allocator:** For small or fixed-size kernel objects. Reduces fragmentation and allocation overhead.
 - **DMA/contiguous allocator:** For device buffers (e.g., VirtIO), ensures physically contiguous memory.
 - **User-space allocator:** Isolated heaps for user processes, supporting allocation and deallocation.
+- **Buddy system allocator:** For efficient allocation and deallocation of memory blocks of power-of-two sizes, reducing fragmentation.
+- **Linked list allocator:** A simple general-purpose heap allocator using a free-list of variable-sized blocks, suitable for kernel heaps.
 
 ## Status
 
 - [x] Boot-time allocator (bump/stack)
+- [ ] Buddy system allocator
+- [ ] Linked list allocator
 - [x] Physical page/frame allocator
 - [ ] Slab/pool allocator
 - [ ] DMA/contiguous allocator
 - [ ] User-space allocator
-
-See the source code and tests for usage examples and details.

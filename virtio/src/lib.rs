@@ -23,7 +23,9 @@
 //!
 //! ## Example Usage
 //!
-//! ```rust
+//! ```no_run
+//! use polished_virtio::VirtioDevice;
+//!
 //! // Create a Virtio device abstraction for a device at bus 0, device 5, function 0, I/O base 0xC000
 //! let virtio = VirtioDevice::new(0, 5, 0, 0xC000);
 //! // Reset the device (unsafe: must ensure device is ready to be reset)

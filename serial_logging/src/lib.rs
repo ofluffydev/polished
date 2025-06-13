@@ -26,7 +26,9 @@
 //!
 //! In your kernel code:
 //!
-//! ```rust
+//! ```no_run
+//! use polished_serial_logging::{serial_println, serial_log};
+//!
 //! serial_println!("Hello, QEMU serial!");
 //! serial_log!("[INFO] ", "Boot complete");
 //! ```
@@ -70,7 +72,7 @@ pub fn _print(args: ::core::fmt::Arguments) {
 #[macro_export]
 macro_rules! serial_print {
     ($($arg:tt)*) => {
-        $crate::serial::_print(format_args!($($arg)*));
+        $crate::_print(format_args!($($arg)*));
     };
 }
 
@@ -92,7 +94,9 @@ macro_rules! serial_println {
 /// - Additional arguments are formatted as in `format!`.
 ///
 /// # Examples
-/// ```
+/// ```no_run
+/// use polished_serial_logging::serial_log;
+///
 /// serial_log!("[INFO] ", "Hello, world!");
 /// serial_log!("[DEBUG] ", "Value: {}", 42);
 /// ```
@@ -126,7 +130,9 @@ macro_rules! serial_log {
 /// - `$value`: Value to print in hexadecimal.
 ///
 /// # Examples
-/// ```
+/// ```no_run
+/// use polished_serial_logging::serial_log_hex;
+///
 /// serial_log_hex!("[INFO] ", 0xdeadbeef);
 /// ```
 #[macro_export]
@@ -229,8 +235,10 @@ pub fn serial_write_hex(mut value: u64) {
 /// Equivalent to `serial_log!("[INFO] ", ...)`.
 ///
 /// # Examples
-/// ```
-/// serial::info("System started");
+/// ```no_run
+/// use polished_serial_logging::info;
+///
+/// info("System started");
 /// ```
 pub fn info(text: &str) {
     serial_log!("[INFO] ", "{}", text);
@@ -241,8 +249,10 @@ pub fn info(text: &str) {
 /// Equivalent to `serial_log_hex!("[INFO] ", value)`.
 ///
 /// # Examples
-/// ```
-/// serial::info_hex(0xdeadbeef);
+/// ```no_run
+/// use polished_serial_logging::info_hex;
+///
+/// info_hex(0xdeadbeef);
 /// ```
 pub fn info_hex(value: u64) {
     serial_log_hex!("[INFO] ", value);
@@ -253,8 +263,10 @@ pub fn info_hex(value: u64) {
 /// Equivalent to `serial_log!("[ERROR] ", ...)`.
 ///
 /// # Examples
-/// ```
-/// serial::error("An error occurred");
+/// ```no_run
+/// use polished_serial_logging::error;
+///
+/// error("An error occurred");
 /// ```
 pub fn error(text: &str) {
     serial_log!("[ERROR] ", "{}", text);
@@ -265,8 +277,9 @@ pub fn error(text: &str) {
 /// Equivalent to `serial_log!("[WARNING] ", ...)`.
 ///
 /// # Examples
-/// ```
-/// serial::warn("Low disk space");
+/// ```no_run
+/// use polished_serial_logging::warn;
+/// warn("Low disk space");
 /// ```
 pub fn warn(text: &str) {
     serial_log!("[WARNING] ", "{}", text);
@@ -277,7 +290,9 @@ pub fn warn(text: &str) {
 /// Equivalent to `serial_log!("[ERROR] ", ...)` but as a macro for formatting.
 ///
 /// # Examples
-/// ```
+/// ```no_run
+/// use polished_serial_logging::error;
+///
 /// error!("Failed: {}", 42);
 /// ```
 #[macro_export]

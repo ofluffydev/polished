@@ -16,6 +16,7 @@
 ///
 /// # Example
 /// ```
+/// use polished_pci::vendor_id_str;
 /// let s = vendor_id_str(0x8086);
 /// assert!(s.contains("Intel"));
 /// ```
@@ -36,6 +37,7 @@ pub fn vendor_id_str(vendor_id: u16) -> &'static str {
 ///
 /// # Example
 /// ```
+/// use polished_pci::class_code_str;
 /// let s = class_code_str(0x03);
 /// assert!(s.contains("Display Controller"));
 /// ```
@@ -56,6 +58,7 @@ pub fn class_code_str(class_code: u8) -> &'static str {
 ///
 /// # Example
 /// ```
+/// use polished_pci::subclass_str;
 /// let s = subclass_str(0x80);
 /// assert!(s.contains("Other"));
 /// ```

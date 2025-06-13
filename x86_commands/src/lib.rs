@@ -10,8 +10,8 @@
 //!
 //! ## Example Usage
 //!
-//! ```rust
-//! use x86_commands::disable_pic;
+//! ```no_run
+//! use polished_x86_commands::disable_pic;
 //! disable_pic();
 //! ```
 //!
@@ -33,8 +33,8 @@ use core::arch::asm;
 /// This function uses inline assembly to directly access hardware ports. It should only be called in a privileged (kernel or bootloader) context.
 ///
 /// # Example
-/// ```rust
-/// x86_commands::disable_pic();
+/// ```no_run
+/// polished_x86_commands::disable_pic();
 /// ```
 pub fn disable_pic() {
     unsafe {

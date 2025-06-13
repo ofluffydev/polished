@@ -166,6 +166,21 @@ impl FreeListFrameAllocator {
         }
         FreeListFrameAllocator { free_list }
     }
+
+    /// Resets the allocator to a new region, clearing and repopulating the free list.
+    ///
+    /// # Safety
+    /// The given range must be frame-aligned and not overlap with used memory.
+    pub unsafe fn reset(&mut self, start: usize, end: usize) {
+        self.free_list.clear();
+        let mut addr = (start + FRAME_SIZE - 1) & !(FRAME_SIZE - 1);
+        while addr + FRAME_SIZE <= end {
+            self.free_list.push(PhysFrame {
+                start_address: addr,
+            });
+            addr += FRAME_SIZE;
+        }
+    }
 }
 
 impl FrameAllocator for FreeListFrameAllocator {
@@ -175,6 +190,62 @@ impl FrameAllocator for FreeListFrameAllocator {
 
     fn deallocate_frame(&mut self, frame: PhysFrame) {
         self.free_list.push(frame);
+    }
+}
+
+/// A thread-safe wrapper around FreeListFrameAllocator using a spinlock.
+///
+/// This allows safe concurrent access to the frame allocator.
+#[cfg(feature = "spin_lock")]
+pub struct LockedFreeListFrameAllocator {
+    inner: spin::Mutex<FreeListFrameAllocator>,
+}
+
+#[cfg(feature = "spin_lock")]
+impl LockedFreeListFrameAllocator {
+    /// Creates a new locked free list frame allocator for the given region.
+    ///
+    /// # Safety
+    /// The given range must be frame-aligned and not overlap with used memory.
+    pub unsafe fn new(start: usize, end: usize) -> Self {
+        LockedFreeListFrameAllocator {
+            inner: spin::Mutex::new(unsafe { FreeListFrameAllocator::new(start, end) }),
+        }
+    }
+
+    /// Initializes a new locked free list frame allocator for the given region.
+    ///
+    /// # Safety
+    /// The given range must be frame-aligned and not overlap with used memory.
+    pub unsafe fn init(start: usize, end: usize) -> Self {
+        LockedFreeListFrameAllocator {
+            inner: spin::Mutex::new(unsafe { FreeListFrameAllocator::new(start, end) }),
+        }
+    }
+
+    /// Returns an empty locked free list frame allocator (no frames available).
+    pub const fn empty() -> Self {
+        LockedFreeListFrameAllocator {
+            inner: spin::Mutex::new(FreeListFrameAllocator {
+                free_list: Vec::new(),
+            }),
+        }
+    }
+
+    /// Locks and returns a guard to the inner allocator.
+    pub fn lock(&'_ self) -> spin::MutexGuard<'_, FreeListFrameAllocator> {
+        self.inner.lock()
+    }
+}
+
+#[cfg(feature = "spin_lock")]
+impl FrameAllocator for LockedFreeListFrameAllocator {
+    fn allocate_frame(&mut self) -> Option<PhysFrame> {
+        self.inner.lock().allocate_frame()
+    }
+
+    fn deallocate_frame(&mut self, frame: PhysFrame) {
+        self.inner.lock().deallocate_frame(frame)
     }
 }
 
@@ -374,5 +445,41 @@ mod tests {
         let r2 = alloc.allocate_frame().unwrap();
         assert_eq!(r1, f2);
         assert_eq!(r2, f1);
+    }
+
+    #[cfg(feature = "spin_lock")]
+    #[test]
+    fn locked_freelist_allocator_basic() {
+        let start = 0x60000;
+        let end = start + 2 * FRAME_SIZE;
+        let alloc = unsafe { LockedFreeListFrameAllocator::init(start, end) };
+        let mut guard = alloc.lock();
+        let f1 = guard.allocate_frame();
+        let f2 = guard.allocate_frame();
+        assert!(f1.is_some() && f2.is_some());
+        assert_ne!(f1, f2);
+        // Should be exhausted now
+        assert!(guard.allocate_frame().is_none());
+    }
+
+    #[cfg(feature = "spin_lock")]
+    #[test]
+    fn locked_freelist_allocator_reuse() {
+        let start = 0x70000;
+        let end = start + 2 * FRAME_SIZE;
+        let alloc = unsafe { LockedFreeListFrameAllocator::init(start, end) };
+        let mut guard = alloc.lock();
+        let f1 = guard.allocate_frame().unwrap();
+        guard.deallocate_frame(f1);
+        let f2 = guard.allocate_frame().unwrap();
+        assert_eq!(f1, f2, "LockedFreelist should reuse deallocated frames");
+    }
+
+    #[cfg(feature = "spin_lock")]
+    #[test]
+    fn locked_freelist_allocator_empty() {
+        let alloc = LockedFreeListFrameAllocator::empty();
+        let mut guard = alloc.lock();
+        assert!(guard.allocate_frame().is_none());
     }
 }

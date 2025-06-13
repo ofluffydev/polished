@@ -36,12 +36,12 @@
 //! ## Example
 //!
 //! ```rust
-//! use allocators::bump::BumpAllocator;
-//! use core::alloc::Layout;
+//! use polished_allocators::bump::BumpAllocator;
+//! use core::alloc::{Layout, GlobalAlloc};
 //!
 //! let alloc = BumpAllocator::new(1024);
 //! let layout = Layout::from_size_align(16, 8).unwrap();
-//! let ptr = unsafe { alloc.alloc(layout) };
+//! let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
 //! assert!(!ptr.is_null());
 //! // ...
 //! alloc.reset();

@@ -151,6 +151,9 @@ format:
 	for f in *.json; do jq . "$$f" > tmp.json && mv tmp.json "$$f"; done
 	@echo "Done formatting files."
 
+test:
+	@echo "Running all tests..."
+	clear && cargo test --workspace --exclude kernel --exclude polished_bootloader
 
 publish:
 	-cargo publish -p polished_bootloader     --allow-dirty --no-verify --target x86_64-unknown-uefi
@@ -166,6 +169,7 @@ publish:
 	-cargo publish -p polished_serial_logging --allow-dirty --no-verify
 	-cargo publish -p polished_x86_commands   --allow-dirty --no-verify
 	-cargo publish -p polished_pci            --allow-dirty --no-verify
+	-cargo publish -p polished_allocators     --allow-dirty --no-verify
 
 publish-dry-run:
 	-cargo publish -p polished_bootloader     --allow-dirty --dry-run --target x86_64-unknown-uefi
@@ -181,3 +185,4 @@ publish-dry-run:
 	-cargo publish -p polished_serial_logging --allow-dirty --dry-run
 	-cargo publish -p polished_x86_commands   --allow-dirty --dry-run
 	-cargo publish -p polished_pci            --allow-dirty --dry-run
+	-cargo publish -p polished_allocators     --allow-dirty --dry-run

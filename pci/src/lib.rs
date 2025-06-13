@@ -29,12 +29,12 @@
 //!
 //! ```no_run
 //! use polished_pci::scan_bus0_devices;
-//! use polished_pci::print_pci_device;
 //!
 //! // Scan all devices on bus 0
 //! let devices = scan_bus0_devices();
 //! for dev in devices.iter() {
-//!     print_pci_device(dev);
+//!     // Use the fields of dev directly, or print as needed
+//!     // e.g., println!("bus={} device={} vendor={:04x} device={:04x} class={:02x} subclass={:02x}", dev.bus, dev.device, dev.vendor_id, dev.device_id, dev.class, dev.subclass);
 //! }
 //! ```
 //!
@@ -44,9 +44,9 @@
 //! use polished_pci::{scan_bus0_devices, PciDevice, class_code_str};
 //!
 //! // Scan all devices on bus 0
-//! let devices = scan_bus0_devices();
+//! let devices = scan_bus0_devices().unwrap();
 //! // Class code 0x02 is for network controllers
-//! let net_dev = devices.iter().find(|dev| dev.class_code == 0x02);
+//! let net_dev = devices.iter().find(|dev| dev.class == 0x02);
 //! if let Some(dev) = net_dev {
 //!     // Do something with the network device
 //!     // e.g., print info or initialize driver
