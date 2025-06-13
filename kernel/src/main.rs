@@ -12,6 +12,7 @@ use core::arch::{asm, naked_asm};
 use polished_ps2::ps2_init;
 use polished_serial_logging::info;
 
+// Internal modules
 mod allocator;
 pub mod demos;
 mod framebuffer_utils;
@@ -21,9 +22,12 @@ use crate::allocator::init_allocator;
 use crate::framebuffer_utils::{clear_framebuffer, log_framebuffer_info};
 use crate::interrupts::init_interrupts;
 
+/// # Safety
+/// This function is marked as naked and must only be called as the very first entry point
+/// after boot. It must not make any stack-based accesses before the stack pointer is set.
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
-unsafe extern "C" fn naked_start() {
+pub unsafe extern "C" fn naked_start() {
     // Set up the stack pointer to the top of the stack
     naked_asm!(
         "cli",
@@ -38,41 +42,41 @@ unsafe extern "C" fn naked_start() {
 
 /// # Safety
 /// This function must be called only as the kernel entry point, and the provided
-/// `fb_info_ptr` must be a valid pointer to a `FramebufferInfo` structure, or null.
+/// `boot_info_ptr` must be a valid pointer to a `BootInfo` structure, or null.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
+    // Initialize heap allocator
     init_allocator();
     let boot_info = unsafe { &*boot_info_ptr };
     let fb = crate::framebuffer_utils::make_framebuffer_info(boot_info);
+
     info("Hello from the kernel!");
     info("Initializing GDT...");
     polished_gdt::init_gdt();
     info("GDT initialized");
+
+    // Set up interrupts and PS/2
     init_interrupts();
     ps2_init();
+
+    // Framebuffer info and clear
     log_framebuffer_info(&fb);
     clear_framebuffer(&fb);
-    x86_64::instructions::interrupts::enable();
-    // Only disable the PIC after confirming interrupts work, or comment out for now
-    // info("Disabling legacy PIC...");
-    // disable_pic();
-    // info("Legacy PIC disabled");
-    // simulate_divide_by_zero();
 
-    // Scan and print all PCI devices using polished_pci
+    // Enable CPU interrupts
+    x86_64::instructions::interrupts::enable();
+
+    // PCI device scan
     pci_enumeration_demo();
 
+    // Demo: extract and print files from ustar archive
     let ustar_archive = include_bytes!("../../archive.tar");
     crate::demos::demo_ustar_archive(ustar_archive);
 
-    // Loop forever to keep the kernel running
+    // Main kernel loop
     info("Kernel initialized successfully, entering main loop...");
-    unsafe {
-        asm!("sti");
-    }
+    unsafe { asm!("sti"); }
     loop {
-        unsafe { asm!("pause; hlt") }; // Use PAUSE before HLT for better power efficiency
+        unsafe { asm!("pause; hlt"); } // Use PAUSE before HLT for better power efficiency
     }
-
-    // panic!("Kernel halted");
 }
