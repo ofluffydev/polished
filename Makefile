@@ -72,7 +72,8 @@ qemu: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
-		-drive file=disk.img,if=virtio,format=raw \
+		-device virtio-blk-pci,drive=vdisk \
+		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot
 
@@ -81,7 +82,8 @@ qemu-nographic: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
-		-drive file=disk.img,if=virtio,format=raw \
+		-device virtio-blk-pci,drive=vdisk \
+		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-nographic
@@ -91,7 +93,8 @@ qemu-gdb: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
-		-drive file=disk.img,if=virtio,format=raw \
+		-device virtio-blk-pci,drive=vdisk \
+		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot \
 		-s -S \
@@ -102,7 +105,8 @@ qemu-gdb-nographic: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
-		-drive file=disk.img,if=virtio,format=raw \
+		-device virtio-blk-pci,drive=vdisk \
+		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-nographic \
@@ -114,7 +118,8 @@ qemu-debug: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
-		-drive file=disk.img,if=virtio,format=raw \
+		-device virtio-blk-pci,drive=vdisk \
+		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-d int
@@ -123,7 +128,8 @@ qemu-debug-nographic: iso disk
 	qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
-		-drive file=disk.img,if=virtio,format=raw \
+		-device virtio-blk-pci,drive=vdisk \
+		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-nographic \

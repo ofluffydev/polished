@@ -21,5 +21,4 @@ polished_panic_handler = { path = "../panic_handler" }
 polished_pci = { path = "../pci" }
 polished_ps2 = { path = "../ps2" }
 polished_serial_logging = { path = "../serial_logging" }
-polished_virtio = { path = "../virtio", default-features = false }
 x86_64 = { workspace = true }
