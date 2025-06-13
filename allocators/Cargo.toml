@@ -1,0 +1,9 @@
+[package]
+description = "A collection of allocators for the Polished project"
+edition = "2024"
+license = "Zlib"
+name = "polished_allocators"
+repository = "https://codeberg.org/ofluffydev/polished"
+version = "0.1.0"
+
+[dependencies]

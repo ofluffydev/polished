@@ -386,6 +386,52 @@ impl VirtioDevice {
         }
         Ok(())
     }
+
+    /// Sets up a Virtio queue at the given index.
+    ///
+    /// # Arguments
+    /// * `index` - The queue index to set up.
+    ///
+    /// # Returns
+    /// * `Ok(())` if the queue was set up successfully
+    /// * `Err(&'static str)` if allocation or setup failed
+    ///
+    /// # Safety
+    /// This function performs direct hardware access and assumes the device is properly initialized.
+    pub fn setup_queue(&self, index: u16) -> Result<(), &'static str> {
+        unsafe {
+            self.select_queue(index);
+            let size = self.get_queue_size();
+            if size == 0 {
+                return Err("Queue size is 0");
+            }
+
+            // Here you'd allocate and zero-initialize a properly aligned buffer
+            // The buffer must be 4K-aligned and large enough for the queue
+            // This is a placeholder; you must provide your own allocator
+            let addr = allocate_virtqueue(size).ok_or("Failed to allocate queue")?;
+
+            self.set_queue_addr(addr);
+        }
+        Ok(())
+    }
+}
+
+/// Allocates a 4K-aligned, zero-initialized buffer for a Virtqueue of the given size (number of entries).
+/// Returns the physical address of the buffer, or None on failure.
+///
+/// This is a simple placeholder implementation using a static buffer for demonstration only.
+/// In a real OS, you should use your kernel's page allocator and return the physical address.
+pub fn allocate_virtqueue(size: u16) -> Option<u64> {
+    const MAX_QUEUE: usize = 256; // adjust as needed
+    static mut VIRTQUEUE_BUF: [u8; 4096 * 4] = [0; 4096 * 4]; // 16 KiB static buffer
+    if size as usize > MAX_QUEUE {
+        return None;
+    }
+    // SAFETY: We only return the address, not a reference, so this is allowed.
+    let ptr = core::ptr::addr_of_mut!(VIRTQUEUE_BUF) as usize;
+    let aligned = (ptr + 0xFFF) & !0xFFF;
+    Some(aligned as u64)
 }
 
 impl From<PciDevice> for VirtioDevice {

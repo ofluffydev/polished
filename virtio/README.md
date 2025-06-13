@@ -2,24 +2,26 @@
 
 **polished_virtio** is a Rust library that makes it easy to interact with [Virtio](https://docs.oasis-open.org/virtio/virtio/v1.1/virtio-v1.1.html) devices in a safe, ergonomic, and no_std environment—perfect for hobby operating systems, kernels, or bare-metal projects. This crate is part of the [Polished OS](../README.md) project, but is designed to be reusable in any OS or low-level Rust project.
 
----
+______________________________________________________________________
 
 ## What is Virtio?
 
 Virtio is a standard for virtual devices, commonly used in virtual machines (like QEMU or KVM) to provide fast, efficient, and simple access to hardware-like devices such as network cards, block devices (disks), and more. Instead of emulating real hardware, Virtio provides a paravirtualized interface: the guest OS and the hypervisor cooperate for better performance and simplicity.
 
 **Why does Virtio matter?**
+
 - **Performance:** Virtio is much faster than traditional device emulation.
 - **Simplicity:** The interface is designed to be easy to implement in both the guest and the hypervisor.
 - **Portability:** The same Virtio interface works across different hypervisors and platforms.
 
 If you're writing an OS or kernel that runs in QEMU, KVM, or other VMs, supporting Virtio is the easiest way to get working disk, network, and other I/O devices.
 
----
+______________________________________________________________________
 
 ## What does this library do?
 
 `polished_virtio` provides a safe, well-documented abstraction for accessing Virtio devices using port-mapped I/O (PIO). It helps you:
+
 - **Discover and represent Virtio devices** found on the PCI bus
 - **Read and write device registers** safely using Rust
 - **Manage device status and features** (the handshake between driver and device)
@@ -28,7 +30,7 @@ If you're writing an OS or kernel that runs in QEMU, KVM, or other VMs, supporti
 
 All low-level hardware access is marked `unsafe` and carefully documented, so you know exactly what the risks are and when it's safe to use each method.
 
----
+______________________________________________________________________
 
 ## Who is this for?
 
@@ -38,7 +40,7 @@ All low-level hardware access is marked `unsafe` and carefully documented, so yo
 
 You do **not** need to be an expert in PCI, hardware, or virtualization to use this crate! The documentation explains each step and why it matters.
 
----
+______________________________________________________________________
 
 ## How does it work?
 
@@ -65,12 +67,13 @@ unsafe { virtio.write_features(features) };
 ### 3. Device Initialization Sequence
 
 Virtio devices require a specific handshake to initialize:
+
 1. **Reset** the device
-2. **Acknowledge** the device
-3. Set the **DRIVER** status
-4. **Negotiate features**
-5. Set **FEATURES_OK**
-6. Set **DRIVER_OK**
+1. **Acknowledge** the device
+1. Set the **DRIVER** status
+1. **Negotiate features**
+1. Set **FEATURES_OK**
+1. Set **DRIVER_OK**
 
 This crate provides methods for each step, and a one-call `init()` method that does the full sequence for you.
 
@@ -84,7 +87,7 @@ if virtio.init().is_ok() {
 
 Direct hardware access is always `unsafe` in Rust. This library marks all such methods as `unsafe` and documents exactly when and how to use them. If you're new to OS dev, read the docs for each method before calling it.
 
----
+______________________________________________________________________
 
 ## Example: Detecting and Initializing a Virtio Device
 
@@ -111,7 +114,7 @@ if virtio.init().is_ok() {
 }
 ```
 
----
+______________________________________________________________________
 
 ## Why is this needed?
 
@@ -119,36 +122,39 @@ if virtio.init().is_ok() {
 - **PCI and Virtio are tricky** for beginners. This crate abstracts the details and provides clear, safe APIs.
 - **No_std and bare-metal friendly:** No heap, no stdlib, just pure Rust and hardware access.
 
----
+______________________________________________________________________
 
 ## Features
+
 - PCI device abstraction (with [polished_pci](../pci/))
 - Safe, documented register access
 - Full Virtio initialization sequence
 - Support for legacy (PIO) Virtio devices
 - Designed for extensibility (block, net, etc. drivers can build on this)
 
----
+______________________________________________________________________
 
 ## Limitations
+
 - Only supports **legacy (port-mapped I/O) Virtio devices** for now (the kind QEMU provides by default)
 - Does **not** implement virtqueues or actual block/network drivers yet—this is just the device abstraction layer (yet)
 - Assumes you are running in a privileged, bare-metal, or kernel environment (not userland)
 
----
+______________________________________________________________________
 
 ## License
 
 This crate is licensed under the [zlib License](https://zlib.net/zlib_license.html).
 
----
+______________________________________________________________________
 
 ## Further Reading
+
 - [Virtio Spec (OASIS)](https://docs.oasis-open.org/virtio/virtio/v1.1/virtio-v1.1.html)
 - [Writing a Virtio Driver (osdev.org)](https://wiki.osdev.org/Virtio)
 - [Polished OS Project](../README.md)
 
----
+______________________________________________________________________
 
 ## Contributing
 

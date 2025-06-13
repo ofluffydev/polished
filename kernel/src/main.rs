@@ -97,7 +97,7 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
 
         // Initialize the VirtIO device
         if let Err(e) = virtio_device.init() {
-            info(&format!("Failed to initialize VirtIO device: {:?}", e));
+            info(&format!("Failed to initialize VirtIO device: {e:?}"));
         } else {
             info("VirtIO device initialized successfully");
         }
