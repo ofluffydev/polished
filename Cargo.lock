@@ -115,6 +115,7 @@ dependencies = [
  "polished_files",
  "polished_graphics",
  "uefi",
+ "x86_64",
 ]
 
 [[package]]

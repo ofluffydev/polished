@@ -22,6 +22,7 @@ uefi = { version = "0.35.0", optional = true, features = [
   "logger",
   "panic_handler",
 ] }
+x86_64.workspace = true
 
 [features]
 default = ["uefi"]

@@ -75,8 +75,12 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
 
     // Main kernel loop
     info("Kernel initialized successfully, entering main loop...");
-    unsafe { asm!("sti"); }
+    unsafe {
+        asm!("sti");
+    }
     loop {
-        unsafe { asm!("pause; hlt"); } // Use PAUSE before HLT for better power efficiency
+        unsafe {
+            asm!("pause; hlt");
+        } // Use PAUSE before HLT for better power efficiency
     }
 }

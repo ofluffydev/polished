@@ -85,6 +85,7 @@ pub struct BootInfo {
     pub framebuffer_height: u32,
     pub framebuffer_pitch: u32,
     pub framebuffer_bpp: u8,
+    pub kernel_entry_addr: u64,
 }
 
 #[cfg(feature = "uefi")]
@@ -110,6 +111,10 @@ pub struct BootInfo {
 /// directly to disk and graphics hardware, which is much more complex and less portable.
 pub fn boot_system(kernel_path: &str) {
     // Load the kernel binary from the specified UEFI path. Returns the entry point address and a callable function pointer to the kernel's entry.
+    use core::ptr::NonNull;
+
+    use uefi::boot::{AllocateType, MemoryType, exit_boot_services};
+    use x86_64::{PhysAddr, registers::control::Cr3, structures::paging::PhysFrame};
     let (entry_point, kernel_entry) = load_kernel(kernel_path);
 
     // Log the kernel's entry point address for debugging purposes.
@@ -145,6 +150,9 @@ pub fn boot_system(kernel_path: &str) {
         framebuffer_height: framebuffer_info.height as u32,
         framebuffer_pitch: pitch,
         framebuffer_bpp: bpp,
+
+        // We can have some fun later with this address.
+        kernel_entry_addr: entry_point as u64,
     };
 
     info!("BootInfo: {boot_info:?}");
@@ -155,6 +163,59 @@ pub fn boot_system(kernel_path: &str) {
         "Jumping to kernel entry point at 0x{entry_point:x} with BootInfo ptr: 0x{:x}",
         boot_info_ptr as usize
     );
+
+    // How many 4-KiB pages do you need? 4 pages → 16-KiB total.
+    const PAGE_COUNT: usize = 4;
+
+    // This returns a NonNull<u8> whose address is the physical base of the region.
+    let pages: NonNull<u8> =
+        uefi::boot::allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, PAGE_COUNT)
+            .expect("Failed to allocate pages");
+
+    // Convert it to a physical base address:
+    let phys_start: u64 = pages.as_ptr() as u64;
+
+    // Zero the 16-KiB you just got:
+    unsafe {
+        core::ptr::write_bytes(pages.as_ptr(), 0, PAGE_COUNT * 4096);
+    }
+
+    // A bare-bones page-table page (4096 bytes, 512 entries * u64 = 4096)
+    #[repr(align(4096))]
+    struct PageTable([u64; 512]);
+
+    // --- 1 GiB huge-page identity map for 0-512 GiB ---
+    let pdpt_phys = phys_start + 0x1000;
+    unsafe {
+        core::ptr::write_bytes(pdpt_phys as *mut u8, 0, 4096);
+    }
+    let pdpt: &mut PageTable = unsafe { &mut *(pdpt_phys as *mut PageTable) };
+    const PDPT_FLAGS: u64 = 0b10000011; // Present | Writable | PS (1 GiB)
+    for i in 0..512 {
+        let addr = (i as u64) << 30; // i * 1 GiB
+        pdpt.0[i] = addr | PDPT_FLAGS;
+    }
+    let pml4: &mut PageTable = unsafe { &mut *(phys_start as *mut PageTable) };
+    pml4.0[0] = pdpt_phys | 0b11; // Present | Writable
+
+    // Build a PhysFrame from your PML4's physical base:
+    let frame = PhysFrame::from_start_address(PhysAddr::new(phys_start)).expect("page-aligned");
+    let (_, old_flags) = Cr3::read();
+
+    // This makes your new tables live:
+    unsafe { Cr3::write(frame, old_flags) };
+
+    // --- Probe the kernel mapping before exit_boot_services ---
+    const KERNEL_VIRT: u64 = 0x1400_00000;
+    unsafe {
+        let probe: *const u64 = KERNEL_VIRT as *const u64;
+        let _ = core::ptr::read_volatile(probe);
+    }
+
+    // Now pray that paging isn't broke and boot.
+    let _mem_map = unsafe { exit_boot_services(None) };
+
+    // Welp now we have a one shot page table, this needs to be replaced with a recursive one later.
 
     unsafe {
         asm!(
