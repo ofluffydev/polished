@@ -5,8 +5,7 @@ extern crate alloc;
 
 use polished_bootloader::BootInfo;
 use polished_memory as _; // Import the memory module for memset, memcpy, etc.
-use polished_panic_handler as _;
-use polished_pci::pci_enumeration_demo; // Import the panic handler.
+use polished_panic_handler as _; // Import the panic handler.
 
 use core::arch::{asm, naked_asm};
 use polished_ps2::ps2_init;
@@ -67,7 +66,11 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     x86_64::instructions::interrupts::enable();
 
     // PCI device scan
-    pci_enumeration_demo();
+    // pci_enumeration_demo();
+
+    // QEMU pci-testdev demo
+    crate::demos::pci_testdev_demo();
+    info("PCI test device demo completed");
 
     // Demo: extract and print files from ustar archive
     let ustar_archive = include_bytes!("../../archive.tar");

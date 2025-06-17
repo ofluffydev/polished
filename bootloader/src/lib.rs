@@ -39,6 +39,8 @@ use polished_elf_loader::load_kernel;
 #[cfg(feature = "uefi")]
 use polished_graphics::framebuffer::FramebufferInfo;
 #[cfg(feature = "uefi")]
+use uefi::{boot::MemoryType, mem::memory_map::MemoryMapIter};
+#[cfg(feature = "uefi")]
 use uefi::{
     boot::{get_handle_for_protocol, open_protocol_exclusive},
     proto::console::text::Output,
@@ -86,6 +88,9 @@ pub struct BootInfo {
     pub framebuffer_pitch: u32,
     pub framebuffer_bpp: u8,
     pub kernel_entry_addr: u64,
+
+    pub usable_start_frame: u64,
+    pub usable_end_frame: u64,
 }
 
 #[cfg(feature = "uefi")]
@@ -113,7 +118,10 @@ pub fn boot_system(kernel_path: &str) {
     // Load the kernel binary from the specified UEFI path. Returns the entry point address and a callable function pointer to the kernel's entry.
     use core::ptr::NonNull;
 
-    use uefi::boot::{AllocateType, MemoryType, exit_boot_services};
+    use uefi::{
+        boot::{AllocateType, MemoryType, exit_boot_services},
+        mem::memory_map::MemoryMap,
+    };
     use x86_64::{PhysAddr, registers::control::Cr3, structures::paging::PhysFrame};
     let (entry_point, kernel_entry) = load_kernel(kernel_path);
 
@@ -136,33 +144,6 @@ pub fn boot_system(kernel_path: &str) {
         }
         polished_graphics::framebuffer::FramebufferFormat::BltOnly => (0u8, 0u32),
     };
-
-    // Construct BootInfo struct to pass to the kernel
-    let boot_info = BootInfo {
-        memory_map_addr: 0,    // TODO: Fill with real memory map address if needed
-        memory_map_entries: 0, // TODO: Fill with real memory map entries if needed
-        initramfs_addr: 0,     // TODO: Fill with real initramfs address if needed
-        initramfs_size: 0,     // TODO: Fill with real initramfs size if needed
-        cmdline_addr: 0,       // TODO: Fill with real cmdline address if needed
-        cmdline_len: 0,        // TODO: Fill with real cmdline length if needed
-        framebuffer_addr: framebuffer_info.address,
-        framebuffer_width: framebuffer_info.width as u32,
-        framebuffer_height: framebuffer_info.height as u32,
-        framebuffer_pitch: pitch,
-        framebuffer_bpp: bpp,
-
-        // We can have some fun later with this address.
-        kernel_entry_addr: entry_point as u64,
-    };
-
-    info!("BootInfo: {boot_info:?}");
-
-    // Pass pointer to BootInfo to the kernel
-    let boot_info_ptr = &boot_info as *const BootInfo;
-    info!(
-        "Jumping to kernel entry point at 0x{entry_point:x} with BootInfo ptr: 0x{:x}",
-        boot_info_ptr as usize
-    );
 
     // How many 4-KiB pages do you need? 4 pages → 16-KiB total.
     const PAGE_COUNT: usize = 4;
@@ -197,6 +178,8 @@ pub fn boot_system(kernel_path: &str) {
     }
     let pml4: &mut PageTable = unsafe { &mut *(phys_start as *mut PageTable) };
     pml4.0[0] = pdpt_phys | 0b11; // Present | Writable
+    // Set up recursive mapping: PML4[511] points to itself
+    pml4.0[511] = phys_start | 0b11; // Present | Writable
 
     // Build a PhysFrame from your PML4's physical base:
     let frame = PhysFrame::from_start_address(PhysAddr::new(phys_start)).expect("page-aligned");
@@ -213,9 +196,32 @@ pub fn boot_system(kernel_path: &str) {
     }
 
     // Now pray that paging isn't broke and boot.
-    let _mem_map = unsafe { exit_boot_services(None) };
+    let mem_map = unsafe { exit_boot_services(None) };
+    let mut entries = mem_map.entries();
+    let (usable_start, usable_end) =
+        find_usable_frame_range(&mut entries).expect("No usable memory regions found");
 
-    // Welp now we have a one shot page table, this needs to be replaced with a recursive one later.
+    // Construct BootInfo struct to pass to the kernel
+    let boot_info = BootInfo {
+        memory_map_addr: 0,    // TODO: Fill with real memory map address if needed
+        memory_map_entries: 0, // TODO: Fill with real memory map entries if needed
+        initramfs_addr: 0,     // TODO: Fill with real initramfs address if needed
+        initramfs_size: 0,     // TODO: Fill with real initramfs size if needed
+        cmdline_addr: 0,       // TODO: Fill with real cmdline address if needed
+        cmdline_len: 0,        // TODO: Fill with real cmdline length if needed
+        framebuffer_addr: framebuffer_info.address,
+        framebuffer_width: framebuffer_info.width as u32,
+        framebuffer_height: framebuffer_info.height as u32,
+        framebuffer_pitch: pitch,
+        framebuffer_bpp: bpp,
+
+        // We can have some fun later with this address.
+        kernel_entry_addr: entry_point as u64,
+        usable_start_frame: usable_start,
+        usable_end_frame: usable_end,
+    };
+
+    let boot_info_ptr = &boot_info as *const BootInfo;
 
     unsafe {
         asm!(
@@ -224,6 +230,27 @@ pub fn boot_system(kernel_path: &str) {
             in(reg) boot_info_ptr,
             in(reg) kernel_entry,
         );
+    }
+}
+
+#[cfg(feature = "uefi")]
+fn find_usable_frame_range(mem_map: &mut MemoryMapIter) -> Option<(u64, u64)> {
+    let mut usable_start = u64::MAX;
+    let mut usable_end = 0;
+
+    for desc in mem_map {
+        if desc.ty == MemoryType::CONVENTIONAL {
+            let start = desc.phys_start;
+            let end = start + desc.page_count * 4096;
+            usable_start = usable_start.min(start);
+            usable_end = usable_end.max(end);
+        }
+    }
+
+    if usable_start < usable_end {
+        Some((usable_start, usable_end))
+    } else {
+        None
     }
 }
 

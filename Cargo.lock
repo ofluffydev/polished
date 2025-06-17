@@ -38,7 +38,7 @@ version = "0.1.1"
 dependencies = [
  "lazy_static",
  "linked_list_allocator",
- "once_cell",
+ "polished_allocators",
  "polished_bootloader",
  "polished_elf_loader",
  "polished_files",
@@ -50,6 +50,8 @@ dependencies = [
  "polished_pci",
  "polished_ps2",
  "polished_serial_logging",
+ "polished_x86_commands",
+ "spin 0.10.0",
  "x86_64",
 ]
 

@@ -9,7 +9,7 @@ version = "0.1.1"
 [dependencies]
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 linked_list_allocator = "0.10.5"
-once_cell = { workspace = true }
+polished_allocators = { path = "../allocators", features = ["spin_lock"] }
 polished_bootloader = { path = "../bootloader", default-features = false }
 polished_elf_loader = { path = "../elf_loader", default-features = false }
 polished_files = { path = "../files", default-features = false }
@@ -21,4 +21,6 @@ polished_panic_handler = { path = "../panic_handler" }
 polished_pci = { path = "../pci" }
 polished_ps2 = { path = "../ps2" }
 polished_serial_logging = { path = "../serial_logging" }
+polished_x86_commands = { path = "../x86_commands" }
+spin = "0.10.0"
 x86_64 = { workspace = true }

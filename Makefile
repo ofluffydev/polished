@@ -73,6 +73,7 @@ qemu: iso disk
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
 		-device virtio-blk-pci,drive=vdisk \
+		-device pci-testdev \
 		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot
@@ -83,6 +84,7 @@ qemu-nographic: iso disk
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
 		-device virtio-blk-pci,drive=vdisk \
+		-device pci-testdev \
 		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
@@ -94,6 +96,7 @@ qemu-gdb: iso disk
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
 		-device virtio-blk-pci,drive=vdisk \
+		-device pci-testdev \
 		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot \
@@ -106,6 +109,7 @@ qemu-gdb-nographic: iso disk
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
 		-device virtio-blk-pci,drive=vdisk \
+		-device pci-testdev \
 		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
@@ -119,6 +123,7 @@ qemu-debug: iso disk
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
 		-device virtio-blk-pci,drive=vdisk \
+		-device pci-testdev \
 		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
@@ -129,6 +134,7 @@ qemu-debug-nographic: iso disk
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive format=raw,file=$(ISO_FILE) \
 		-device virtio-blk-pci,drive=vdisk \
+		-device pci-testdev \
 		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
