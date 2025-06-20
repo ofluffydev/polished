@@ -1,4 +1,4 @@
-use polished_allocators::frame::{FrameAllocator, LockedFreeListFrameAllocator};
+use polished_allocators::frame::{LockedFreeListFrameAllocator};
 // Example demo code for using the ustar archive in the kernel
 use polished_files::ustar::tar_lookup;
 use polished_pci::{probe_bar, scan_bus0_devices};
@@ -10,7 +10,7 @@ use alloc::format;
 use polished_pci::error::PciError;
 
 use spin::Mutex;
-use x86_64::structures::paging::PageTableFlags;
+use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 
 use lazy_static::lazy_static;
 
@@ -62,7 +62,7 @@ fn map_page(virt: u64, phys: u64, flags: PageTableFlags) {
                     .allocate_frame()
                     .expect("Failed to allocate page for page table");
                 entry.set_addr(
-                    PhysAddr::new(new_table.start_address().try_into().unwrap()),
+                    PhysAddr::new(new_table.start_address().as_u64()),
                     PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
                 );
             }
@@ -72,6 +72,9 @@ fn map_page(virt: u64, phys: u64, flags: PageTableFlags) {
         let table: &mut PageTable = &mut *(table_addr as *mut PageTable);
         let entry = &mut table[indexes[3] as usize];
         entry.set_addr(PhysAddr::new(phys), flags);
+
+        // Flush the TLB for the updated virtual address
+        x86_64::instructions::tlb::flush(VirtAddr::new(virt));
     }
 }
 
@@ -113,6 +116,45 @@ pub fn demo_ustar_archive(ustar_archive: &'static [u8]) {
     // Print the contents of the file
     let file_contents = core::str::from_utf8(file.0).expect("Invalid UTF-8 in file");
     info(&format!("File contents:\n{file_contents}"));
+}
+
+pub fn test_page_mapping() {
+    let test_virt = 0xFFFF_9000_0000_0000u64;
+    let test_phys = 0x200000; // 2 MiB (just as a demo, must be safe)
+
+    // Use alloc::format! and pass as &str to info()
+    info(&alloc::format!(
+        "[paging-test] Mapping virt=0x{test_virt:x} to phys=0x{test_phys:x} with PRESENT|WRITABLE"
+    ));
+
+    // Map a page
+    map_page(
+        test_virt,
+        test_phys,
+        PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+    );
+
+    info(&alloc::format!(
+        "[paging-test] Writing value 0x1234567890ABCDEF to virt=0x{test_virt:x}"
+    ));
+    let ptr = test_virt as *mut u64;
+    info("[paging-test] Created ptr variable");
+
+    info("[paging-test] Attempting to write to the mapped virtual address...");
+    unsafe {
+        // Page faults here
+        core::ptr::write_volatile(ptr, 0x1234567890ABCDEF);
+        info(&format!(
+            "[paging-test] Successfully wrote to virt=0x{test_virt:x}, now reading back..."
+        ));
+        let val = core::ptr::read_volatile(ptr);
+        info(&alloc::format!(
+            "[paging-test] Read value 0x{val:x} from virt=0x{test_virt:x}"
+        ));
+        assert_eq!(val, 0x1234567890ABCDEF, "paging test failed");
+    }
+
+    info("Paging test passed — mapping succeeded and memory is accessible.");
 }
 
 pub fn pci_testdev_demo() {

@@ -14,6 +14,7 @@ macro_rules! kprint {
     ($($args:tt)*) => ({
         use core::fmt::Write;
         let _ = write!($crate::DebugSerial{}, $($args)*);
+        $crate::DebugSerial::put_byte(b'\n');
     });
 }
 

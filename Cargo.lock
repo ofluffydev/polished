@@ -106,6 +106,7 @@ name = "polished_allocators"
 version = "0.1.1"
 dependencies = [
  "spin 0.9.8",
+ "x86_64",
 ]
 
 [[package]]
@@ -113,9 +114,11 @@ name = "polished_bootloader"
 version = "0.1.1"
 dependencies = [
  "log",
+ "polished_allocators",
  "polished_elf_loader",
  "polished_files",
  "polished_graphics",
+ "polished_serial_logging",
  "uefi",
  "x86_64",
 ]

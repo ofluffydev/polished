@@ -5,7 +5,8 @@ extern crate alloc;
 
 use polished_bootloader::BootInfo;
 use polished_memory as _; // Import the memory module for memset, memcpy, etc.
-use polished_panic_handler as _; // Import the panic handler.
+use polished_panic_handler as _;
+use x86_64::instructions::interrupts::without_interrupts; // Import the panic handler.
 
 use core::arch::{asm, naked_asm};
 use polished_ps2::ps2_init;
@@ -18,6 +19,7 @@ mod framebuffer_utils;
 mod interrupts;
 
 use crate::allocator::init_allocator;
+use crate::demos::test_page_mapping;
 use crate::framebuffer_utils::{clear_framebuffer, log_framebuffer_info};
 use crate::interrupts::init_interrupts;
 
@@ -63,10 +65,23 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     clear_framebuffer(&fb);
 
     // Enable CPU interrupts
-    x86_64::instructions::interrupts::enable();
+    // x86_64::instructions::interrupts::enable();
+
+    // Assembly code to allow interrupts
+    unsafe {
+        asm!("sti");
+    }
 
     // PCI device scan
     // pci_enumeration_demo();
+
+    // stop interrupts for a minute
+    without_interrupts(|| {
+        // Paging test
+        info("Running paging test...");
+        test_page_mapping();
+        info("Paging test completed successfully");
+    });
 
     // QEMU pci-testdev demo
     crate::demos::pci_testdev_demo();
