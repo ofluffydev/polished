@@ -1,4 +1,4 @@
-use polished_allocators::frame::{LockedFreeListFrameAllocator};
+use polished_allocators::frame::LockedFreeListFrameAllocator;
 // Example demo code for using the ustar archive in the kernel
 use polished_files::ustar::tar_lookup;
 use polished_pci::{probe_bar, scan_bus0_devices};
@@ -10,7 +10,7 @@ use alloc::format;
 use polished_pci::error::PciError;
 
 use spin::Mutex;
-use x86_64::{structures::paging::PageTableFlags, VirtAddr};
+use x86_64::{VirtAddr, structures::paging::PageTableFlags};
 
 use lazy_static::lazy_static;
 
@@ -37,11 +37,18 @@ lazy_static! {
     };
 }
 
-/// Recursive PML4 is in entry 511
+/// Physmap base: all physical memory is mapped at this virtual address offset
+const PHYSMAP_BASE: u64 = 0xFFFF_8000_0000_0000;
+
+/// Map a single 4KiB page at `virt` to `phys` with the given flags, using physmap for page table access.
 fn map_page(virt: u64, phys: u64, flags: PageTableFlags) {
     use x86_64::{PhysAddr, structures::paging::*};
 
-    let r = 511;
+    // Walk page tables using physmap
+    let pml4_phys = get_pml4_phys();
+    let pml4_virt = PHYSMAP_BASE + pml4_phys;
+    let pml4: &mut PageTable = unsafe { &mut *(pml4_virt as *mut PageTable) };
+
     let indexes = [
         (virt >> 39) & 0x1FF,
         (virt >> 30) & 0x1FF,
@@ -49,33 +56,39 @@ fn map_page(virt: u64, phys: u64, flags: PageTableFlags) {
         (virt >> 12) & 0x1FF,
     ];
 
-    let mut table_addr = 0xFFFF_FFFF_FFFF_F000u64; // start at recursive PML4
-
-    unsafe {
-        for index in indexes[..3].iter() {
-            let table: &mut PageTable = &mut *(table_addr as *mut PageTable);
-            let entry = &mut table[*index as usize];
-            if entry.is_unused() {
-                // Allocate a page for the next level
-                let new_table = PAGE_ALLOCATOR
-                    .lock()
-                    .allocate_frame()
-                    .expect("Failed to allocate page for page table");
-                entry.set_addr(
-                    PhysAddr::new(new_table.start_address().as_u64()),
-                    PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
-                );
+    let mut table = pml4;
+    for &idx in indexes[..3].iter() {
+        if table[idx as usize].is_unused() {
+            let new_table = PAGE_ALLOCATOR
+                .lock()
+                .allocate_frame()
+                .expect("Failed to allocate page for page table");
+            table[idx as usize].set_addr(
+                PhysAddr::new(new_table.start_address().as_u64()),
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+            );
+            // Zero the new table
+            let new_table_virt = PHYSMAP_BASE + new_table.start_address().as_u64();
+            unsafe {
+                core::ptr::write_bytes(new_table_virt as *mut u8, 0, 4096);
             }
-            table_addr = 0xFFFF_0000_0000_0000 | (r << 39) | (r << 30) | (r << 21) | (*index << 12);
         }
-
-        let table: &mut PageTable = &mut *(table_addr as *mut PageTable);
-        let entry = &mut table[indexes[3] as usize];
-        entry.set_addr(PhysAddr::new(phys), flags);
-
-        // Flush the TLB for the updated virtual address
-        x86_64::instructions::tlb::flush(VirtAddr::new(virt));
+        let next_table_phys = table[idx as usize].addr().as_u64();
+        let next_table_virt = PHYSMAP_BASE + next_table_phys;
+        table = unsafe { &mut *(next_table_virt as *mut PageTable) };
     }
+    let pt = table;
+    let entry = &mut pt[indexes[3] as usize];
+    entry.set_addr(PhysAddr::new(phys), flags);
+    x86_64::instructions::tlb::flush(VirtAddr::new(virt));
+}
+
+/// Returns the physical address of the PML4 table (should be set by bootloader in a global/static)
+pub fn get_pml4_phys() -> u64 {
+    unsafe extern "C" {
+        static BOOT_PML4_PHYS: u64;
+    }
+    unsafe { BOOT_PML4_PHYS }
 }
 
 pub fn map_mmio_bar(virt_addr: u64, phys_addr: u64, size: u64) {

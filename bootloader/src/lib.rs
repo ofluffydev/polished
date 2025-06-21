@@ -37,32 +37,23 @@ extern crate uefi;
 #[cfg(feature = "uefi")]
 use core::arch::asm;
 
-use core::ptr::NonNull;
 #[cfg(feature = "uefi")]
 use log::info;
-use polished_allocators::frame::LockedFreeListFrameAllocator;
 #[cfg(feature = "uefi")]
 use polished_elf_loader::load_kernel;
 #[cfg(feature = "uefi")]
 use polished_graphics::framebuffer::FramebufferInfo;
 #[cfg(feature = "uefi")]
-use uefi::{boot::MemoryType, mem::memory_map::MemoryMapIter};
+use uefi::boot::MemoryType;
 #[cfg(feature = "uefi")]
-use uefi::{
-    boot::{AllocateType, exit_boot_services},
-    mem::memory_map::MemoryMap,
-};
+use uefi::boot::{AllocateType, exit_boot_services};
 #[cfg(feature = "uefi")]
 use uefi::{
     boot::{get_handle_for_protocol, open_protocol_exclusive},
     proto::console::text::Output,
 };
-use x86_64::structures::paging::PageTable;
-use x86_64::{
-    PhysAddr, VirtAddr,
-    registers::control::Cr3,
-    structures::paging::{OffsetPageTable, Page, PageTableFlags, PhysFrame, Size4KiB},
-};
+use x86_64::registers::control::Cr3;
+use x86_64::structures::paging::{PageTableFlags, PhysFrame, Size4KiB};
 
 // static NOOP_LOGGER;
 
@@ -111,6 +102,8 @@ pub struct BootInfo {
 
     pub usable_start_frame: u64,
     pub usable_end_frame: u64,
+    /// Physical address of the PML4 table (for physmap access)
+    pub pml4_phys: u64,
 }
 
 #[cfg(feature = "uefi")]
@@ -136,17 +129,20 @@ pub struct BootInfo {
 /// directly to disk and graphics hardware, which is much more complex and less portable.
 #[unsafe(no_mangle)]
 pub fn boot_system(kernel_path: &str) {
+    use core::ptr::NonNull;
+
     use polished_serial_logging::kprint;
-    use uefi::boot;
+
+    use x86_64::{
+        PhysAddr,
+        registers::control::{Cr0, Cr0Flags},
+        structures::paging::PageTable,
+    };
 
     info!("[boot] Starting kernel load from path: {kernel_path}");
     let (entry_point, kernel_entry) = load_kernel(kernel_path);
     info!("[boot] Kernel load finished");
-
-    // Log the kernel's entry point address for debugging purposes.
     info!("[boot] Kernel entry point: 0x{:x}", kernel_entry as usize);
-
-    // Log the address where we will jump to start the kernel.
     info!("[boot] Jumping to kernel entry point at 0x{entry_point:x}");
 
     info!("[boot] Starting framebuffer initialization");
@@ -154,11 +150,7 @@ pub fn boot_system(kernel_path: &str) {
     info!("[boot] Framebuffer initialization finished");
     info!("[boot] Framebuffer info: {framebuffer_info:?}");
 
-    // Stops printing here???
-
-    // Determine bits per pixel based on framebuffer format (assume 32bpp for Rgb/Bgr/Bitmask, 0 for BltOnly)
-    info!("[boot] Determining framebuffer format");
-    info!("[boot] Framebuffer format: {:?}", framebuffer_info.format);
+    // Determine bits per pixel based on framebuffer format
     let (bpp, pitch) = match framebuffer_info.format {
         polished_graphics::framebuffer::FramebufferFormat::Rgb
         | polished_graphics::framebuffer::FramebufferFormat::Bgr
@@ -167,140 +159,169 @@ pub fn boot_system(kernel_path: &str) {
         }
         polished_graphics::framebuffer::FramebufferFormat::BltOnly => (0u8, 0u32),
     };
-    info!("[boot] Framebuffer format determination finished");
 
-    // How many 4-KiB pages do you need? 4 pages → 16-KiB total.
-    info!("[boot] Starting page table allocation");
-    info!("[boot] Page count: {PAGE_COUNT}");
-    const PAGE_COUNT: usize = 4;
-
-    // This returns a NonNull<u8> whose address is the physical base of the region.
-    info!("[boot] Allocating {PAGE_COUNT} pages of memory for page tables...");
+    // Allocate enough pages for PML4, PDPT, PD, PT, etc.
+    const PAGE_COUNT: usize = 16; // More pages for more mappings
     let pages: NonNull<u8> =
         uefi::boot::allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, PAGE_COUNT)
             .expect("Failed to allocate pages");
-    info!("[boot] Page table allocation finished");
-    info!("[boot] Allocated pages at: {:p}", pages.as_ptr());
-
-    // Convert it to a physical base address:
-    info!("[boot] Converting allocated pages to physical address");
-    info!(
-        "[boot] Physical start address: 0x{:x}",
-        pages.as_ptr() as u64
-    );
     let phys_start: u64 = pages.as_ptr() as u64;
-    info!("[boot] Conversion to physical address finished");
-
-    // Zero the 16-KiB you just got:
-    info!("[boot] Zeroing allocated pages...");
     unsafe {
         core::ptr::write_bytes(pages.as_ptr(), 0, PAGE_COUNT * 4096);
     }
-    info!("[boot] Zeroing allocated pages finished");
 
-    // A bare-bones page-table page (4096 bytes, 512 entries * u64 = 4096)
-    #[repr(align(4096))]
-    struct PageTable([u64; 512]);
-
-    // --- 1 GiB huge-page identity map for 0-512 GiB ---
-    info!("[boot] Setting up identity-mapped 1 GiB pages...");
-    let pdpt_phys = phys_start + 0x1000;
-    unsafe {
-        info!("[boot] Zeroing PDPT at physical address: 0x{pdpt_phys:x}");
-        core::ptr::write_bytes(pdpt_phys as *mut u8, 0, 4096);
-    }
-    info!("[boot] PDPT physical address: 0x{pdpt_phys:x}");
-    let pdpt: &mut PageTable = unsafe { &mut *(pdpt_phys as *mut PageTable) };
-    const PDPT_FLAGS: u64 = 0b10000011; // Present | Writable | PS (1 GiB)
-    for i in 0..512 {
-        let addr = (i as u64) << 30; // i * 1 GiB
-        pdpt.0[i] = addr | PDPT_FLAGS;
-    }
+    // --- Set up new paging ---
     let pml4: &mut PageTable = unsafe { &mut *(phys_start as *mut PageTable) };
-    pml4.0[0] = pdpt_phys | 0b11; // Present | Writable
-    // Set up recursive mapping: PML4[511] points to itself
-    pml4.0[511] = phys_start | 0b11; // Present | Writable
+    pml4.zero();
+    // Remove recursive mapping: do not set pml4[511]
 
-    // --- Set up higher-half mapping for 0xffff_9000_0000_0000 ---
-    // PML4 index for 0xffff_9000_0000_0000 is 256
-    let hh_pml4_index = 256;
-    let hh_pdpt_phys = phys_start + 0x2000; // Use next free page
-    unsafe {
-        info!("[boot] Zeroing higher-half PDPT at physical address: 0x{hh_pdpt_phys:x}");
-        core::ptr::write_bytes(hh_pdpt_phys as *mut u8, 0, 4096);
+    // Bump allocator for page tables (start after initial 16 KiB)
+    let mut next_table_phys = phys_start + 0x4000;
+
+    // Map kernel higher half: 0xffffffff80000000 -> kernel physical
+    let kernel_phys = entry_point as u64 & 0x0000_ffff_ffff_ffff;
+    let kernel_virt = 0xffffffff80000000u64;
+    let pml4_idx = (kernel_virt >> 39) & 0x1ff;
+    let pdpt_phys = next_table_phys; next_table_phys += 0x1000;
+    let pdpt: &mut PageTable = unsafe { &mut *(pdpt_phys as *mut PageTable) };
+    pdpt.zero();
+    pml4[pml4_idx as usize].set_addr(
+        PhysAddr::new(pdpt_phys),
+        PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+    );
+    let pd_phys = next_table_phys; next_table_phys += 0x1000;
+    let pd: &mut PageTable = unsafe { &mut *(pd_phys as *mut PageTable) };
+    pd.zero();
+    pdpt[0].set_addr(
+        PhysAddr::new(pd_phys),
+        PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+    );
+    let pt_phys = next_table_phys; next_table_phys += 0x1000;
+    let pt: &mut PageTable = unsafe { &mut *(pt_phys as *mut PageTable) };
+    pt.zero();
+    pd[0].set_addr(
+        PhysAddr::new(pt_phys),
+        PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+    );
+    // Map all kernel pages (assume kernel fits in 16 MiB)
+    let kernel_size = 16 * 1024 * 1024u64;
+    let num_pages = kernel_size / 4096;
+    for i in 0..num_pages {
+        pt[i as usize].set_addr(
+            PhysAddr::new(kernel_phys + i * 4096),
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+        );
     }
-    pml4.0[hh_pml4_index] = hh_pdpt_phys | 0b11; // Present | Writable
-    // No need to fill in PDPT entries yet; OffsetPageTable will do so as needed.
-    info!("[boot] Higher-half PDPT set up at PML4[256] -> 0x{hh_pdpt_phys:x}");
-    info!("[boot] Identity-mapped 1 GiB pages setup finished");
 
-    // Build a PhysFrame from your PML4's physical base:
-    info!("[boot] Building PhysFrame from PML4 physical base");
+    // Map all physical RAM to 0xffff800000000000 + phys
+    let physmap_base = 0xffff800000000000u64;
+    let ram_size = 32 * 1024 * 1024u64; // Example: 32 MiB RAM
+    let num_physmap_pages = ram_size / 4096;
+    for i in 0..num_physmap_pages {
+        let virt = physmap_base + i * 4096;
+        let phys = i * 4096;
+        // Walk page tables and map (reuse map_page logic or inline here)
+        // For simplicity, only 4KiB pages
+        // Walk PML4 -> PDPT -> PD -> PT
+        let pml4_idx = (virt >> 39) & 0x1ff;
+        let pdpt_idx = (virt >> 30) & 0x1ff;
+        let pd_idx = (virt >> 21) & 0x1ff;
+        let pt_idx = (virt >> 12) & 0x1ff;
+        // Allocate next levels if needed
+        let pdpt = if pml4[pml4_idx as usize].is_unused() {
+            let pdpt_phys = next_table_phys; next_table_phys += 0x1000;
+            pml4[pml4_idx as usize].set_addr(
+                PhysAddr::new(pdpt_phys),
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+            );
+            let pdpt: &mut PageTable = unsafe { &mut *(pdpt_phys as *mut PageTable) };
+            pdpt.zero();
+            pdpt
+        } else {
+            let pdpt_phys = pml4[pml4_idx as usize].addr().as_u64();
+            unsafe { &mut *(pdpt_phys as *mut PageTable) }
+        };
+        let pd = if pdpt[pdpt_idx as usize].is_unused() {
+            let pd_phys = next_table_phys; next_table_phys += 0x1000;
+            pdpt[pdpt_idx as usize].set_addr(
+                PhysAddr::new(pd_phys),
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+            );
+            let pd: &mut PageTable = unsafe { &mut *(pd_phys as *mut PageTable) };
+            pd.zero();
+            pd
+        } else {
+            let pd_phys = pdpt[pdpt_idx as usize].addr().as_u64();
+            unsafe { &mut *(pd_phys as *mut PageTable) }
+        };
+        let pt = if pd[pd_idx as usize].is_unused() {
+            let pt_phys = next_table_phys; next_table_phys += 0x1000;
+            pd[pd_idx as usize].set_addr(
+                PhysAddr::new(pt_phys),
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+            );
+            let pt: &mut PageTable = unsafe { &mut *(pt_phys as *mut PageTable) };
+            pt.zero();
+            pt
+        } else {
+            let pt_phys = pd[pd_idx as usize].addr().as_u64();
+            unsafe { &mut *(pt_phys as *mut PageTable) }
+        };
+        pt[pt_idx as usize].set_addr(
+            PhysAddr::new(phys),
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+        );
+    }
+    // Map BootInfo struct to 0xffffffff00000000
+    let bootinfo_virt = 0xffffffff00000000u64;
+    let bootinfo_pml4_idx = (bootinfo_virt >> 39) & 0x1ff;
+    let bootinfo_pdpt_phys = phys_start + 0x7000;
+    let bootinfo_pdpt: &mut PageTable = unsafe { &mut *(bootinfo_pdpt_phys as *mut PageTable) };
+    bootinfo_pdpt.zero();
+    pml4[bootinfo_pml4_idx as usize].set_addr(
+        PhysAddr::new(bootinfo_pdpt_phys),
+        PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+    );
+    let bootinfo_pd_phys = phys_start + 0x8000;
+    let bootinfo_pd: &mut PageTable = unsafe { &mut *(bootinfo_pd_phys as *mut PageTable) };
+    bootinfo_pd.zero();
+    bootinfo_pdpt[0].set_addr(
+        PhysAddr::new(bootinfo_pd_phys),
+        PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+    );
+    let bootinfo_pt_phys = phys_start + 0x9000;
+    let bootinfo_pt: &mut PageTable = unsafe { &mut *(bootinfo_pt_phys as *mut PageTable) };
+    bootinfo_pt.zero();
+    bootinfo_pd[0].set_addr(
+        PhysAddr::new(bootinfo_pt_phys),
+        PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+    );
+    // We'll map the BootInfo struct after it's created
+
+    // Disable write protection
+    unsafe {
+        let mut cr0 = Cr0::read();
+        cr0.remove(Cr0Flags::WRITE_PROTECT);
+        Cr0::write(cr0);
+    }
+
+    // Switch to new page tables
     let frame =
         PhysFrame::<Size4KiB>::from_start_address(PhysAddr::new(phys_start)).expect("page-aligned");
     let (_, old_flags) = Cr3::read();
-    info!("[boot] PhysFrame build finished");
-
-    // This makes your new tables live:
-    info!("[boot] Installing new page tables (Cr3::write)");
     unsafe { Cr3::write(frame, old_flags) };
-    info!("[boot] New page tables installed");
 
-    log::set_max_level(log::LevelFilter::Off); // Disable logging for now
+    // Restore write protection
+    unsafe {
+        let mut cr0 = Cr0::read();
+        cr0.insert(Cr0Flags::WRITE_PROTECT);
+        Cr0::write(cr0);
+    }
+
+    log::set_max_level(log::LevelFilter::Off);
     kprint!("Falling back to kprint for early boot logging");
 
-    // Get a "backing" 4kb PhysFrame for the frame allocator
-    let mem_map = boot::memory_map(MemoryType::LOADER_DATA).expect("Failed to get memory map");
-    let mut entries = mem_map.entries();
-
-    // get the start/end early
-    kprint!("[boot] Finding usable frame range");
-    let (usable_start, usable_end) =
-        find_usable_frame_range(&mut entries).expect("No usable memory regions found");
-    kprint!("[boot] Usable frame range found: 0x{usable_start:x} - 0x{usable_end:x}");
-
-    kprint!("[boot] Setting up LockedFreeListFrameAllocator");
-    // fails here due to allocating to create an allocator...
-    let mut allocator: LockedFreeListFrameAllocator = unsafe {
-        use polished_allocators::frame::LockedFreeListFrameAllocator;
-        LockedFreeListFrameAllocator::new(usable_start as usize, usable_end as usize)
-    };
-    kprint!("[boot] LockedFreeListFrameAllocator initialized");
-
-    kprint!("[boot] Initializing OffsetPageTable mapper");
-    let mut mapper = unsafe { init_mapper(phys_start) };
-    kprint!("[boot] OffsetPageTable mapper initialized");
-
-    kprint!("[boot] Setting up test mapping");
-    let test_virt = VirtAddr::new(0xffff_9000_0000_0000);
-    let test_phys = PhysAddr::new(0x0020_0000); // ← Must be an allocated physical page
-    kprint!("[boot] Test virtual address: {test_virt:?}");
-    kprint!("[boot] Test physical address: {test_phys:?}");
-
-    kprint!("[boot] Creating frame for test mapping");
-    let frame = PhysFrame::<Size4KiB>::containing_address(test_phys);
-    let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
-    kprint!("[boot] Frame: {frame:?}");
-
-    kprint!("[boot] Mapping test virtual address to physical frame");
-    let page = Page::<Size4KiB>::containing_address(test_virt);
-
-    kprint!("[boot] Page: {page:?}");
-
-    // Dies here (Page fault)
-    let map_to_result = unsafe {
-        use x86_64::structures::paging::Mapper;
-        mapper.map_to(page, frame, flags, &mut allocator)
-    };
-    map_to_result.expect("map_to failed").flush();
-    kprint!("[boot] Test mapping setup finished");
-
-    kprint!("[boot] Calling exit_boot_services");
-    let _mem_map = unsafe { exit_boot_services(None) };
-    kprint!("[boot] exit_boot_services finished");
-
-    // Construct BootInfo struct to pass to the kernel
-    kprint!("[boot] Constructing BootInfo struct");
+    // Construct BootInfo struct and map it to 0xffffffff00000000
     let boot_info = BootInfo {
         memory_map_addr: 0,    // TODO: Fill with real memory map address if needed
         memory_map_entries: 0, // TODO: Fill with real memory map entries if needed
@@ -313,55 +334,59 @@ pub fn boot_system(kernel_path: &str) {
         framebuffer_height: framebuffer_info.height as u32,
         framebuffer_pitch: pitch,
         framebuffer_bpp: bpp,
-
-        // We can have some fun later with this address.
         kernel_entry_addr: entry_point as u64,
-        usable_start_frame: usable_start,
-        usable_end_frame: usable_end,
+        // Set usable_start and usable_end for BootInfo
+        usable_start_frame: 0x100000u64,
+        usable_end_frame: ram_size,
+        pml4_phys: phys_start, // Pass PML4 physical address
     };
-    kprint!("[boot] BootInfo struct constructed");
+    let boot_info_phys = &boot_info as *const BootInfo as u64;
+    // Map the BootInfo struct
+    let bootinfo_pt: &mut PageTable = unsafe { &mut *(bootinfo_pt_phys as *mut PageTable) };
+    bootinfo_pt[0].set_addr(
+        PhysAddr::new(boot_info_phys),
+        PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+    );
 
-    let boot_info_ptr = &boot_info as *const BootInfo;
+    // Exit boot services
+    kprint!("[boot] Calling exit_boot_services");
+    let _mem_map = unsafe { exit_boot_services(None) };
+    kprint!("[boot] exit_boot_services finished");
 
+    // Jump to kernel entry point in higher half
+    let boot_info_ptr = bootinfo_virt as *const BootInfo;
     kprint!("[boot] Transferring control to kernel entry point");
     unsafe {
         asm!(
             "mov rdi, {0}",
-            "call {1}",
+            "jmp {1}",
             in(reg) boot_info_ptr,
-            in(reg) kernel_entry,
+            in(reg) kernel_virt as *const (),
         );
     }
     kprint!("[boot] Kernel entry point call finished (should never return)");
 }
 
-/// Create a new OffsetPageTable
-unsafe fn init_mapper(pml4_phys: u64) -> OffsetPageTable<'static> {
-    let offset = VirtAddr::zero(); // UEFI: identity mapping
-    let pml4 = unsafe { &mut *(pml4_phys as *mut PageTable) };
-    unsafe { OffsetPageTable::new(pml4, offset) }
-}
+// #[cfg(feature = "uefi")]
+// fn find_usable_frame_range(mem_map: &mut MemoryMapIter) -> Option<(u64, u64)> {
+//     let mut usable_start = u64::MAX;
+//     let mut usable_end = 0;
 
-#[cfg(feature = "uefi")]
-fn find_usable_frame_range(mem_map: &mut MemoryMapIter) -> Option<(u64, u64)> {
-    let mut usable_start = u64::MAX;
-    let mut usable_end = 0;
+//     for desc in mem_map {
+//         if desc.ty == MemoryType::CONVENTIONAL {
+//             let start = desc.phys_start;
+//             let end = start + desc.page_count * 4096;
+//             usable_start = usable_start.min(start);
+//             usable_end = usable_end.max(end);
+//         }
+//     }
 
-    for desc in mem_map {
-        if desc.ty == MemoryType::CONVENTIONAL {
-            let start = desc.phys_start;
-            let end = start + desc.page_count * 4096;
-            usable_start = usable_start.min(start);
-            usable_end = usable_end.max(end);
-        }
-    }
-
-    if usable_start < usable_end {
-        Some((usable_start, usable_end))
-    } else {
-        None
-    }
-}
+//     if usable_start < usable_end {
+//         Some((usable_start, usable_end))
+//     } else {
+//         None
+//     }
+// }
 
 #[cfg(feature = "uefi")]
 /// Initializes the UEFI environment and clears the screen.

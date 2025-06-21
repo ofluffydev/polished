@@ -41,6 +41,31 @@ pub unsafe extern "C" fn naked_start() {
     );
 }
 
+/// Unmap all identity-mapped pages in the lower half (0x0..0x00007fffffffffff)
+pub fn cleanup_uefi_identity_mappings() {
+    use polished_serial_logging::info;
+    use x86_64::VirtAddr;
+    use x86_64::structures::paging::{PageTable, PageTableFlags};
+
+    // Use physmap to access PML4
+    let pml4_phys = crate::demos::get_pml4_phys();
+    let pml4_virt = 0xFFFF_8000_0000_0000u64 + pml4_phys;
+    let pml4: &mut PageTable = unsafe { &mut *(pml4_virt as *mut PageTable) };
+
+    // Unmap all PML4 entries for lower half (0..256)
+    for i in 0..256 {
+        if pml4[i].flags().contains(PageTableFlags::PRESENT) {
+            pml4[i].set_unused();
+        }
+    }
+    // Flush TLB for the entire lower half
+    for i in 0..256 {
+        let virt = (i as u64) << 39;
+        x86_64::instructions::tlb::flush(VirtAddr::new(virt));
+    }
+    info("[paging] Cleaned up UEFI identity mappings (lower half)");
+}
+
 /// # Safety
 /// This function must be called only as the kernel entry point, and the provided
 /// `boot_info_ptr` must be a valid pointer to a `BootInfo` structure, or null.
@@ -56,6 +81,9 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     polished_gdt::init_gdt();
     info("GDT initialized");
 
+    // Set the PML4 physical address for physmap page table access
+    set_boot_pml4_phys(boot_info.pml4_phys);
+
     // Set up interrupts and PS/2
     init_interrupts();
     ps2_init();
@@ -63,6 +91,9 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     // Framebuffer info and clear
     log_framebuffer_info(&fb);
     clear_framebuffer(&fb);
+
+    // Clean up UEFI identity mappings
+    cleanup_uefi_identity_mappings();
 
     // Enable CPU interrupts
     // x86_64::instructions::interrupts::enable();
@@ -102,3 +133,17 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
         } // Use PAUSE before HLT for better power efficiency
     }
 }
+
+/// Set the PML4 physical address for physmap page table access
+fn set_boot_pml4_phys(pml4_phys: u64) {
+    unsafe extern "C" {
+        static mut BOOT_PML4_PHYS: u64;
+    }
+    unsafe {
+        BOOT_PML4_PHYS = pml4_phys;
+    }
+}
+
+#[unsafe(no_mangle)]
+#[unsafe(link_section = ".bss.boot_pml4_phys")]
+pub static mut BOOT_PML4_PHYS: u64 = 0;

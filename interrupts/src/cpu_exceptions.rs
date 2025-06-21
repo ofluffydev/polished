@@ -19,7 +19,7 @@ pub fn setup_cpu_exceptions(idt: &mut InterruptDescriptorTable) {
     unsafe {
         idt.double_fault
             .set_handler_fn(double_fault_handler)
-            .set_stack_index(1);
+            .set_stack_index(1); // Set stack index for double fault
         // Set IST index for NMI (IST2)
         idt.non_maskable_interrupt
             .set_handler_fn(non_maskable_interrupt_handler)
