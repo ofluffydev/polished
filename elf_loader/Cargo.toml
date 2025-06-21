@@ -24,4 +24,5 @@ uefi = { workspace = true, optional = true, features = [
   "logger",
   "panic_handler",
 ] }
+x86_64.workspace = true
 xmas-elf = "0.10.0"

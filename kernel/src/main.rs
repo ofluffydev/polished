@@ -31,11 +31,12 @@ pub unsafe extern "C" fn naked_start() {
     naked_asm!(
         "cli",
         "lea rsp, STACK_TOP",
-        "call kernel_entry",
+        "call {entry}",
         "2:",
         "cli",
         "hlt",
-        "jmp 2b"
+        "jmp 2b",
+        entry = sym kernel_entry
     );
 }
 
@@ -67,8 +68,7 @@ pub fn cleanup_uefi_identity_mappings() {
 /// # Safety
 /// This function must be called only as the kernel entry point, and the provided
 /// `boot_info_ptr` must be a valid pointer to a `BootInfo` structure, or null.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
+unsafe fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     // Initialize heap allocator
     init_allocator();
     let boot_info = unsafe { &*boot_info_ptr };
