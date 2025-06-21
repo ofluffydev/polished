@@ -38,7 +38,7 @@ build-bootloader: ustar-archive
 	cargo build -p polished_bootloader --target x86_64-unknown-uefi --features uefi $(if $(filter release,$(BOOTLOADER_BUILD_DIR)),--release,)
 
 build-kernel: ustar-archive
-	env RUSTFLAGS="-C relocation-model=static -C link-args=-no-pie" \
+	env RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C link-args=-no-pie" \
 	cargo build -p kernel -Zbuild-std=core,alloc --target x86_64-polished-kernel.json $(if $(filter release,$(KERNEL_BUILD_DIR)),--release,)
 
 check-artifacts: build-kernel build-bootloader

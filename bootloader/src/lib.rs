@@ -94,12 +94,9 @@ pub struct BootInfo {
     pub framebuffer_height: u32,
     pub framebuffer_pitch: u32,
     pub framebuffer_bpp: u8,
-    pub kernel_entry_addr: u64,
 
     pub usable_start_frame: u64,
     pub usable_end_frame: u64,
-    /// Physical address of the PML4 table (for physmap access)
-    pub pml4_phys: u64,
 }
 
 #[cfg(feature = "uefi")]
@@ -123,14 +120,41 @@ pub struct BootInfo {
 /// # UEFI for beginners
 /// UEFI provides the services that make steps 1 and 2 possible. Without UEFI, you would have to write code to talk
 /// directly to disk and graphics hardware, which is much more complex and less portable.
-#[unsafe(no_mangle)]
 pub fn boot_system(kernel_path: &str) {
+    use polished_allocators::frame::BumpFrameAllocator;
     use polished_serial_logging::kprint;
+    use uefi::{boot::{self, memory_map, MemoryType}, mem::memory_map::MemoryMap};
+    use x86_64::structures::paging::OffsetPageTable;
+    info!("[boot] Searching for long free memory region");
+    let mmap = memory_map(MemoryType::LOADER_DATA).unwrap();
+    let memory_region = mmap.entries().find(|desc| desc.ty == MemoryType::CONVENTIONAL && desc.page_count >= 128).unwrap();
+    info!("[boot] Starting page table and frame allocator initialization");
+    let mut frame_alloc = unsafe { BumpFrameAllocator::new(memory_region.phys_start as usize, memory_region.phys_start as usize + 128 * 4096) };
+    
+    // Disable write protection so we can write to the page table
+    // Enable NX pageflag for safety
+    unsafe {
+        use x86_64::registers::control::{Cr0Flags, EferFlags};
+
+        x86_64::registers::control::Cr0::update(|x| x.remove(Cr0Flags::WRITE_PROTECT));
+        x86_64::registers::control::Efer::update(|x| x.insert(EferFlags::NO_EXECUTE_ENABLE));
+    }
+    // Cr3 needs to contain a valid page table so this is safe
+    // also virt_addr = phys_addr from uefi identity mappings
+    let page_table = unsafe {
+        use x86_64::structures::paging::PageTable;
+
+        let (curr, _) = x86_64::registers::control::Cr3::read();
+        &mut *(curr.start_address().as_u64() as *mut PageTable)
+    };
+    use x86_64::VirtAddr;
+    // Offset is zero because everything is identity mapped
+    let mut page_table = unsafe { OffsetPageTable::new(page_table, VirtAddr::zero()) };
+
     info!("[boot] Starting kernel load from path: {kernel_path}");
-    let (entry_point, kernel_entry) = load_kernel(kernel_path);
+    let kernel_entry = load_kernel(kernel_path, &mut page_table, &mut frame_alloc);
     info!("[boot] Kernel load finished");
     info!("[boot] Kernel entry point: 0x{:x}", kernel_entry as usize);
-    info!("[boot] Jumping to kernel entry point at 0x{entry_point:x}");
 
     info!("[boot] Starting framebuffer initialization");
     let framebuffer_info = initialize_framebuffer();
@@ -166,11 +190,9 @@ pub fn boot_system(kernel_path: &str) {
         framebuffer_height: framebuffer_info.height as u32,
         framebuffer_pitch: pitch,
         framebuffer_bpp: bpp,
-        kernel_entry_addr: entry_point as u64,
         // Set usable_start and usable_end for BootInfo
         usable_start_frame: 0x100000u64,
         usable_end_frame: 0, // TODO: Set real RAM size if needed
-        pml4_phys: 0, // TODO: Set real PML4 physical address if needed
     };
     let boot_info_ptr = &boot_info as *const BootInfo;
 
@@ -183,10 +205,10 @@ pub fn boot_system(kernel_path: &str) {
     kprint!("[boot] Transferring control to kernel entry point");
     unsafe {
         asm!(
-            "mov rdi, {0}",
-            "jmp {1}",
+            "mov rdi, {}",
+            "jmp {entry}",
             in(reg) boot_info_ptr,
-            in(reg) entry_point as *const (),
+            entry = in(reg) kernel_entry,
         );
     }
     kprint!("[boot] Kernel entry point call finished (should never return)");
