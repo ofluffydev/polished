@@ -6,7 +6,6 @@ extern crate alloc;
 use polished_bootloader::BootInfo;
 use polished_memory as _; // Import the memory module for memset, memcpy, etc.
 use polished_panic_handler as _;
-use x86_64::instructions::interrupts::without_interrupts; // Import the panic handler.
 
 use core::arch::{asm, naked_asm};
 use polished_ps2::ps2_init;
@@ -19,7 +18,6 @@ mod framebuffer_utils;
 mod interrupts;
 
 use crate::allocator::init_allocator;
-use crate::demos::test_page_mapping;
 use crate::framebuffer_utils::{clear_framebuffer, log_framebuffer_info};
 use crate::interrupts::init_interrupts;
 
@@ -82,7 +80,7 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     info("GDT initialized");
 
     // Set the PML4 physical address for physmap page table access
-    set_boot_pml4_phys(boot_info.pml4_phys);
+    // set_boot_pml4_phys(boot_info.pml4_phys);
 
     // Set up interrupts and PS/2
     init_interrupts();
@@ -93,7 +91,7 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     clear_framebuffer(&fb);
 
     // Clean up UEFI identity mappings
-    cleanup_uefi_identity_mappings();
+    // cleanup_uefi_identity_mappings();
 
     // Enable CPU interrupts
     // x86_64::instructions::interrupts::enable();
@@ -107,12 +105,12 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     // pci_enumeration_demo();
 
     // stop interrupts for a minute
-    without_interrupts(|| {
-        // Paging test
-        info("Running paging test...");
-        test_page_mapping();
-        info("Paging test completed successfully");
-    });
+    // without_interrupts(|| {
+    //     // Paging test
+    //     info("Running paging test...");
+    //     test_page_mapping();
+    //     info("Paging test completed successfully");
+    // });
 
     // QEMU pci-testdev demo
     crate::demos::pci_testdev_demo();
@@ -134,15 +132,15 @@ pub unsafe extern "C" fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     }
 }
 
-/// Set the PML4 physical address for physmap page table access
-fn set_boot_pml4_phys(pml4_phys: u64) {
-    unsafe extern "C" {
-        static mut BOOT_PML4_PHYS: u64;
-    }
-    unsafe {
-        BOOT_PML4_PHYS = pml4_phys;
-    }
-}
+// /// Set the PML4 physical address for physmap page table access
+// fn set_boot_pml4_phys(pml4_phys: u64) {
+//     unsafe extern "C" {
+//         static mut BOOT_PML4_PHYS: u64;
+//     }
+//     unsafe {
+//         BOOT_PML4_PHYS = pml4_phys;
+//     }
+// }
 
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".bss.boot_pml4_phys")]
