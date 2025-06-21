@@ -131,17 +131,3 @@ unsafe fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
         } // Use PAUSE before HLT for better power efficiency
     }
 }
-
-// /// Set the PML4 physical address for physmap page table access
-// fn set_boot_pml4_phys(pml4_phys: u64) {
-//     unsafe extern "C" {
-//         static mut BOOT_PML4_PHYS: u64;
-//     }
-//     unsafe {
-//         BOOT_PML4_PHYS = pml4_phys;
-//     }
-// }
-
-#[unsafe(no_mangle)]
-#[unsafe(link_section = ".bss.boot_pml4_phys")]
-pub static mut BOOT_PML4_PHYS: u64 = 0;
