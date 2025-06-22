@@ -96,8 +96,11 @@ use core::{
 /// All pointers returned by this allocator become invalid when the allocator is dropped or reset. The allocator must outlive all allocations.
 /// Dropping or resetting the allocator will free the heap (Boxed slice).
 pub struct BumpAllocator {
+    /// Heap buffer, boxed and 32-byte aligned.
     heap: Box<[Align32]>,
+    /// Current offset (in bytes) from the start of the heap, atomically updated.
     offset: AtomicUsize,
+    /// Total heap size in bytes.
     heap_size: usize,
 }
 

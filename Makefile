@@ -15,6 +15,9 @@ KERNEL_BUILD_DIR := $(if $(RELEASE),release,debug)
 KERNEL_NAME = kernel
 KERNEL_PATH = $(CURDIR)/target/x86_64-polished-kernel/$(KERNEL_BUILD_DIR)/$(KERNEL_NAME)
 
+# QEMU extra flags
+QEMU_FLAGS ?=
+
 # USTAR archive creation (required before kernel build)
 .PHONY: ustar-archive
 ustar-archive:
@@ -35,7 +38,7 @@ build-bootloader: ustar-archive
 	cargo build -p polished_bootloader --target x86_64-unknown-uefi --features uefi $(if $(filter release,$(BOOTLOADER_BUILD_DIR)),--release,)
 
 build-kernel: ustar-archive
-	env RUSTFLAGS="-C relocation-model=static -C link-args=-no-pie" \
+	env RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C link-args=-no-pie" \
 	cargo build -p kernel -Zbuild-std=core,alloc --target x86_64-polished-kernel.json $(if $(filter release,$(KERNEL_BUILD_DIR)),--release,)
 
 check-artifacts: build-kernel build-bootloader
@@ -76,7 +79,8 @@ qemu: iso disk
 		-device pci-testdev \
 		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
-		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot
+		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot \
+		$(QEMU_FLAGS)
 
 # Headless (no graphical output)
 qemu-nographic: iso disk
@@ -88,7 +92,8 @@ qemu-nographic: iso disk
 		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
-		-nographic
+		-nographic \
+		$(QEMU_FLAGS)
 
 # QEMU with GDB stub (graphical)
 qemu-gdb: iso disk
@@ -101,7 +106,8 @@ qemu-gdb: iso disk
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot \
 		-s -S \
-		-d unimp,guest_errors
+		-d unimp,guest_errors \
+		$(QEMU_FLAGS)
 
 # QEMU with GDB stub and no graphics
 qemu-gdb-nographic: iso disk
@@ -115,7 +121,8 @@ qemu-gdb-nographic: iso disk
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-nographic \
 		-s -S \
-		-d unimp,guest_errors
+		-d unimp,guest_errors \
+		$(QEMU_FLAGS)
 
 # QEMU with extra debug output (interrupts)
 qemu-debug: iso disk
@@ -127,7 +134,8 @@ qemu-debug: iso disk
 		-drive id=vdisk,file=disk.img,if=none,format=raw \
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
-		-d int
+		-d int \
+		$(QEMU_FLAGS)
 
 qemu-debug-nographic: iso disk
 	qemu-system-x86_64 \
@@ -139,7 +147,8 @@ qemu-debug-nographic: iso disk
 		-smp 4 -m 6G -cpu max \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
 		-nographic \
-		-d int
+		-d int \
+		$(QEMU_FLAGS)
 
 # Create a virtio disk image
 disk:

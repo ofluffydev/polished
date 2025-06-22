@@ -1,4 +1,4 @@
-use polished_allocators::frame::{FrameAllocator, LockedFreeListFrameAllocator};
+use polished_allocators::frame::LockedFreeListFrameAllocator;
 // Example demo code for using the ustar archive in the kernel
 use polished_files::ustar::tar_lookup;
 use polished_pci::{probe_bar, scan_bus0_devices};
@@ -10,7 +10,6 @@ use alloc::format;
 use polished_pci::error::PciError;
 
 use spin::Mutex;
-use x86_64::structures::paging::PageTableFlags;
 
 use lazy_static::lazy_static;
 
@@ -37,59 +36,6 @@ lazy_static! {
     };
 }
 
-/// Recursive PML4 is in entry 511
-fn map_page(virt: u64, phys: u64, flags: PageTableFlags) {
-    use x86_64::{PhysAddr, structures::paging::*};
-
-    let r = 511;
-    let indexes = [
-        (virt >> 39) & 0x1FF,
-        (virt >> 30) & 0x1FF,
-        (virt >> 21) & 0x1FF,
-        (virt >> 12) & 0x1FF,
-    ];
-
-    let mut table_addr = 0xFFFF_FFFF_FFFF_F000u64; // start at recursive PML4
-
-    unsafe {
-        for index in indexes[..3].iter() {
-            let table: &mut PageTable = &mut *(table_addr as *mut PageTable);
-            let entry = &mut table[*index as usize];
-            if entry.is_unused() {
-                // Allocate a page for the next level
-                let new_table = PAGE_ALLOCATOR
-                    .lock()
-                    .allocate_frame()
-                    .expect("Failed to allocate page for page table");
-                entry.set_addr(
-                    PhysAddr::new(new_table.start_address().try_into().unwrap()),
-                    PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
-                );
-            }
-            table_addr = 0xFFFF_0000_0000_0000 | (r << 39) | (r << 30) | (r << 21) | (*index << 12);
-        }
-
-        let table: &mut PageTable = &mut *(table_addr as *mut PageTable);
-        let entry = &mut table[indexes[3] as usize];
-        entry.set_addr(PhysAddr::new(phys), flags);
-    }
-}
-
-pub fn map_mmio_bar(virt_addr: u64, phys_addr: u64, size: u64) {
-    let mut offset = 0;
-    while offset < size {
-        let vaddr = virt_addr + offset;
-        let paddr = phys_addr + offset;
-
-        map_page(
-            vaddr,
-            paddr,
-            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_CACHE,
-        );
-        offset += 4096;
-    }
-}
-
 /// Demonstrates looking up and printing files from a ustar archive.
 pub fn demo_ustar_archive(ustar_archive: &'static [u8]) {
     // Example usage of the ustar module
@@ -97,7 +43,7 @@ pub fn demo_ustar_archive(ustar_archive: &'static [u8]) {
         Some(file) => file,
         None => {
             warn("File not found in archive: mytext.txt");
-            (b"" as &[u8], 0)
+            (b"".as_slice(), 0)
         }
     };
     info(&format!("Found file: mytext.txt, size: {}", file.1));
@@ -105,7 +51,7 @@ pub fn demo_ustar_archive(ustar_archive: &'static [u8]) {
         Some(file) => file,
         None => {
             warn("File not found in archive: hello_world.rs");
-            (b"" as &[u8], 0)
+            (b"".as_slice(), 0)
         }
     };
     info(&format!("Found file: hello_world.rs, size: {}", file.1));

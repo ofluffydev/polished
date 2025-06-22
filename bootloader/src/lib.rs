@@ -24,6 +24,11 @@
 //! If you are new to UEFI, think of it as a set of helper functions provided by your computer's firmware
 //! that let you interact with hardware and files before your OS is running.
 
+/*
+    WARNING: Rust analyzer CONSTANTLY says numerous things in this file are unused.
+    IT IS LYING.
+*/
+
 #![no_std]
 
 #[cfg(feature = "uefi")]
@@ -39,12 +44,19 @@ use polished_elf_loader::load_kernel;
 #[cfg(feature = "uefi")]
 use polished_graphics::framebuffer::FramebufferInfo;
 #[cfg(feature = "uefi")]
-use uefi::{boot::MemoryType, mem::memory_map::MemoryMapIter};
+use uefi::boot::exit_boot_services;
+#[cfg(feature = "uefi")]
+use uefi::mem::memory_map::MemoryMapOwned;
 #[cfg(feature = "uefi")]
 use uefi::{
     boot::{get_handle_for_protocol, open_protocol_exclusive},
     proto::console::text::Output,
 };
+
+use x86_64::VirtAddr;
+pub const MEM_OFFSET: VirtAddr = VirtAddr::new(0xffff_8000_0000_0000);
+
+// static NOOP_LOGGER;
 
 /// Boot information structure passed to the kernel by the bootloader.
 ///
@@ -87,7 +99,6 @@ pub struct BootInfo {
     pub framebuffer_height: u32,
     pub framebuffer_pitch: u32,
     pub framebuffer_bpp: u8,
-    pub kernel_entry_addr: u64,
 
     pub usable_start_frame: u64,
     pub usable_end_frame: u64,
@@ -115,27 +126,64 @@ pub struct BootInfo {
 /// UEFI provides the services that make steps 1 and 2 possible. Without UEFI, you would have to write code to talk
 /// directly to disk and graphics hardware, which is much more complex and less portable.
 pub fn boot_system(kernel_path: &str) {
-    // Load the kernel binary from the specified UEFI path. Returns the entry point address and a callable function pointer to the kernel's entry.
-    use core::ptr::NonNull;
+    use polished_allocators::frame::BumpFrameAllocator;
+    use polished_serial_logging::kprint;
+    use uefi::{boot::{memory_map, MemoryType}, mem::memory_map::MemoryMap};
+    use x86_64::{structures::paging::{OffsetPageTable, Page, PhysFrame, Size1GiB}, PhysAddr};
+    info!("[boot] Searching for long free memory region");
+    let mmap = memory_map(MemoryType::LOADER_DATA).unwrap();
+    let memory_region = mmap.entries().find(|desc| desc.ty == MemoryType::CONVENTIONAL && desc.page_count >= 128).unwrap();
+    info!("[boot] Starting page table and frame allocator initialization");
+    let mut frame_alloc = unsafe { BumpFrameAllocator::new(memory_region.phys_start as usize, memory_region.phys_start as usize + 128 * 4096) };
+    
+    // Disable write protection so we can write to the page table
+    // Enable NX pageflag for safety
+    unsafe {
+        use x86_64::registers::control::{Cr0Flags, EferFlags};
 
-    use uefi::{
-        boot::{AllocateType, MemoryType, exit_boot_services},
-        mem::memory_map::MemoryMap,
+        x86_64::registers::control::Cr0::update(|x| x.remove(Cr0Flags::WRITE_PROTECT));
+        x86_64::registers::control::Efer::update(|x| x.insert(EferFlags::NO_EXECUTE_ENABLE));
+    }
+    // Cr3 needs to contain a valid page table so this is safe
+    // also virt_addr = phys_addr from uefi identity mappings
+    let page_table = unsafe {
+        use x86_64::structures::paging::PageTable;
+
+        let (curr, _) = x86_64::registers::control::Cr3::read();
+        &mut *(curr.start_address().as_u64() as *mut PageTable)
     };
-    use x86_64::{PhysAddr, registers::control::Cr3, structures::paging::PhysFrame};
-    let (entry_point, kernel_entry) = load_kernel(kernel_path);
+    use x86_64::VirtAddr;
+    // Offset is zero because everything is identity mapped
+    let mut page_table = unsafe { OffsetPageTable::new(page_table, VirtAddr::zero()) };
 
-    // Log the kernel's entry point address for debugging purposes.
-    info!("Kernel entry point: 0x{:x}", kernel_entry as usize);
+    info!("[boot] Starting kernel load from path: {kernel_path}");
+    let kernel_entry = load_kernel(kernel_path, &mut page_table, &mut frame_alloc);
+    info!("[boot] Kernel load finished");
+    info!("[boot] Kernel entry point: 0x{:x}", kernel_entry as usize);
 
-    // Log the address where we will jump to start the kernel.
-    info!("Jumping to kernel entry point at 0x{entry_point:x}");
+    // Map memory at an offset
+    let max_phys_addr = max_phys_addr(&mmap);
+    info!("[boot] Mapping 0x0-{max_phys_addr:x} with offset {MEM_OFFSET:x}");
+    let page_range = Page::<Size1GiB>::containing_address(MEM_OFFSET)..Page::<Size1GiB>::containing_address(MEM_OFFSET + max_phys_addr);
+    for page in page_range {
+        use x86_64::structures::paging::{Mapper, PageTableFlags};
 
-    // Initialize the framebuffer and retrieve its configuration info (resolution, address, etc.).
+        let frame = PhysFrame::containing_address(PhysAddr::new(page.start_address() - MEM_OFFSET));
+        unsafe { page_table.map_to(page, frame, PageTableFlags::PRESENT | PageTableFlags::NO_EXECUTE | PageTableFlags::WRITABLE, &mut frame_alloc) }.unwrap().flush();
+    }
+    // Reenabling write protection because we are done with the page table here
+    unsafe {
+        use x86_64::registers::control::Cr0Flags;
+
+        x86_64::registers::control::Cr0::update(|x| x.insert(Cr0Flags::WRITE_PROTECT));
+    }
+
+    info!("[boot] Starting framebuffer initialization");
     let framebuffer_info = initialize_framebuffer();
-    info!("Framebuffer info: {framebuffer_info:?}");
+    info!("[boot] Framebuffer initialization finished");
+    info!("[boot] Framebuffer info: {framebuffer_info:?}");
 
-    // Determine bits per pixel based on framebuffer format (assume 32bpp for Rgb/Bgr/Bitmask, 0 for BltOnly)
+    // Determine bits per pixel based on framebuffer format
     let (bpp, pitch) = match framebuffer_info.format {
         polished_graphics::framebuffer::FramebufferFormat::Rgb
         | polished_graphics::framebuffer::FramebufferFormat::Bgr
@@ -145,63 +193,13 @@ pub fn boot_system(kernel_path: &str) {
         polished_graphics::framebuffer::FramebufferFormat::BltOnly => (0u8, 0u32),
     };
 
-    // How many 4-KiB pages do you need? 4 pages → 16-KiB total.
-    const PAGE_COUNT: usize = 4;
+    // NOTE: Paging setup and manipulation removed as requested.
+    // You should implement your own paging setup here.
 
-    // This returns a NonNull<u8> whose address is the physical base of the region.
-    let pages: NonNull<u8> =
-        uefi::boot::allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, PAGE_COUNT)
-            .expect("Failed to allocate pages");
+    log::set_max_level(log::LevelFilter::Off);
+    kprint!("Falling back to kprint for early boot logging");
 
-    // Convert it to a physical base address:
-    let phys_start: u64 = pages.as_ptr() as u64;
-
-    // Zero the 16-KiB you just got:
-    unsafe {
-        core::ptr::write_bytes(pages.as_ptr(), 0, PAGE_COUNT * 4096);
-    }
-
-    // A bare-bones page-table page (4096 bytes, 512 entries * u64 = 4096)
-    #[repr(align(4096))]
-    struct PageTable([u64; 512]);
-
-    // --- 1 GiB huge-page identity map for 0-512 GiB ---
-    let pdpt_phys = phys_start + 0x1000;
-    unsafe {
-        core::ptr::write_bytes(pdpt_phys as *mut u8, 0, 4096);
-    }
-    let pdpt: &mut PageTable = unsafe { &mut *(pdpt_phys as *mut PageTable) };
-    const PDPT_FLAGS: u64 = 0b10000011; // Present | Writable | PS (1 GiB)
-    for i in 0..512 {
-        let addr = (i as u64) << 30; // i * 1 GiB
-        pdpt.0[i] = addr | PDPT_FLAGS;
-    }
-    let pml4: &mut PageTable = unsafe { &mut *(phys_start as *mut PageTable) };
-    pml4.0[0] = pdpt_phys | 0b11; // Present | Writable
-    // Set up recursive mapping: PML4[511] points to itself
-    pml4.0[511] = phys_start | 0b11; // Present | Writable
-
-    // Build a PhysFrame from your PML4's physical base:
-    let frame = PhysFrame::from_start_address(PhysAddr::new(phys_start)).expect("page-aligned");
-    let (_, old_flags) = Cr3::read();
-
-    // This makes your new tables live:
-    unsafe { Cr3::write(frame, old_flags) };
-
-    // --- Probe the kernel mapping before exit_boot_services ---
-    const KERNEL_VIRT: u64 = 0x1400_00000;
-    unsafe {
-        let probe: *const u64 = KERNEL_VIRT as *const u64;
-        let _ = core::ptr::read_volatile(probe);
-    }
-
-    // Now pray that paging isn't broke and boot.
-    let mem_map = unsafe { exit_boot_services(None) };
-    let mut entries = mem_map.entries();
-    let (usable_start, usable_end) =
-        find_usable_frame_range(&mut entries).expect("No usable memory regions found");
-
-    // Construct BootInfo struct to pass to the kernel
+    // Construct BootInfo struct
     let boot_info = BootInfo {
         memory_map_addr: 0,    // TODO: Fill with real memory map address if needed
         memory_map_entries: 0, // TODO: Fill with real memory map entries if needed
@@ -209,49 +207,49 @@ pub fn boot_system(kernel_path: &str) {
         initramfs_size: 0,     // TODO: Fill with real initramfs size if needed
         cmdline_addr: 0,       // TODO: Fill with real cmdline address if needed
         cmdline_len: 0,        // TODO: Fill with real cmdline length if needed
-        framebuffer_addr: framebuffer_info.address,
+        framebuffer_addr: framebuffer_info.address + MEM_OFFSET.as_u64(),
         framebuffer_width: framebuffer_info.width as u32,
         framebuffer_height: framebuffer_info.height as u32,
         framebuffer_pitch: pitch,
         framebuffer_bpp: bpp,
-
-        // We can have some fun later with this address.
-        kernel_entry_addr: entry_point as u64,
-        usable_start_frame: usable_start,
-        usable_end_frame: usable_end,
+        // Set usable_start and usable_end for BootInfo
+        usable_start_frame: 0x100000u64,
+        usable_end_frame: 0, // TODO: Set real RAM size if needed
     };
-
     let boot_info_ptr = &boot_info as *const BootInfo;
 
+    // Exit boot services
+    kprint!("[boot] Calling exit_boot_services");
+    let _mem_map = unsafe { exit_boot_services(None) };
+    kprint!("[boot] exit_boot_services finished");
+
+    // Jump to kernel entry point in higher half
+    kprint!("[boot] Transferring control to kernel entry point");
     unsafe {
         asm!(
-            "mov rdi, {0}",
-            "call {1}",
+            "mov rdi, {}",
+            "jmp {entry}",
             in(reg) boot_info_ptr,
-            in(reg) kernel_entry,
+            entry = in(reg) kernel_entry,
         );
     }
+    kprint!("[boot] Kernel entry point call finished (should never return)");
 }
 
 #[cfg(feature = "uefi")]
-fn find_usable_frame_range(mem_map: &mut MemoryMapIter) -> Option<(u64, u64)> {
-    let mut usable_start = u64::MAX;
-    let mut usable_end = 0;
+pub fn max_phys_addr(memmap: &MemoryMapOwned) -> u64 {
+        use uefi::mem::memory_map::MemoryMap;
 
-    for desc in mem_map {
-        if desc.ty == MemoryType::CONVENTIONAL {
-            let start = desc.phys_start;
-            let end = start + desc.page_count * 4096;
-            usable_start = usable_start.min(start);
-            usable_end = usable_end.max(end);
-        }
-    }
-
-    if usable_start < usable_end {
-        Some((usable_start, usable_end))
-    } else {
-        None
-    }
+        memmap
+            .entries()
+            .filter(|x| x.ty.0 < 0x10) // skip weird custom stuff that is in the terabytes
+            .map(|x| x.phys_start + x.page_count * 4096)
+            .max()
+            .unwrap()
+            // Always cover at least the first 4 GiB of physical memory. That area
+            // contains useful MMIO regions (local APIC, I/O APIC, PCI bars) that
+            // we want to make accessible to the kernel even if no DRAM exists >4GiB.
+            .max(0x1_0000_0000)
 }
 
 #[cfg(feature = "uefi")]

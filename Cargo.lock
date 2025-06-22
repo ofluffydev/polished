@@ -103,9 +103,10 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
 name = "polished_allocators"
-version = "0.1.1"
+version = "0.2.1"
 dependencies = [
  "spin 0.9.8",
+ "x86_64",
 ]
 
 [[package]]
@@ -113,9 +114,11 @@ name = "polished_bootloader"
 version = "0.1.1"
 dependencies = [
  "log",
+ "polished_allocators",
  "polished_elf_loader",
  "polished_files",
  "polished_graphics",
+ "polished_serial_logging",
  "uefi",
  "x86_64",
 ]
@@ -128,6 +131,7 @@ dependencies = [
  "polished_files",
  "polished_graphics",
  "uefi",
+ "x86_64",
  "xmas-elf",
 ]
 

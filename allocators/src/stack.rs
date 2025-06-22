@@ -72,8 +72,11 @@ struct Align32([u8; 32]);
 /// All pointers returned by this allocator become invalid when the allocator is dropped. The allocator must outlive all allocations.
 /// Dropping the allocator will free the heap (Boxed slice).
 pub struct StackAllocator {
+    /// Heap buffer, boxed and 32-byte aligned.
     heap: Box<[MaybeUninit<Align32>]>,
+    /// Current offset (in bytes) from the start of the heap, atomically updated.
     offset: AtomicUsize,
+    /// Total heap size in bytes.
     heap_size: usize,
 }
 
@@ -105,14 +108,18 @@ impl StackAllocator {
     }
 }
 
+/// Safety: StackAllocator is safe to share between threads for allocation and deallocation.
 unsafe impl Sync for StackAllocator {}
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct StackAllocHeader {
+    /// Offset to the previous allocation (for LIFO deallocation).
     prev_offset: usize,
 }
 
+/// Implements the `GlobalAlloc` trait for `StackAllocator`.
+/// Allocates and deallocates memory in strict LIFO order.
 unsafe impl GlobalAlloc for StackAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let size = layout.size();

@@ -50,42 +50,11 @@ use core::fmt;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::vec::Vec;
+use x86_64::PhysAddr;
+use x86_64::structures::paging::{FrameAllocator, PageSize, PhysFrame, Size4KiB};
 
-/// Size of a physical frame in bytes.
-pub const FRAME_SIZE: usize = 4096;
-
-/// Represents a physical frame of memory.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
-pub struct PhysFrame {
-    pub start_address: usize,
-}
-
-impl PhysFrame {
-    /// Returns the frame containing the given address.
-    ///
-    /// The returned frame's start address is aligned down to the nearest frame boundary.
-    pub const fn containing_address(addr: usize) -> Self {
-        PhysFrame {
-            start_address: addr & !(FRAME_SIZE - 1),
-        }
-    }
-
-    /// Returns the start address of this frame.
-    pub const fn start_address(&self) -> usize {
-        self.start_address
-    }
-}
-
-/// Trait for a physical frame allocator.
-///
-/// Provides methods to allocate and deallocate physical frames.
-pub trait FrameAllocator {
-    /// Allocates a frame. Returns `None` if out of memory.
-    fn allocate_frame(&mut self) -> Option<PhysFrame>;
-
-    /// Frees a frame, making it available for reuse.
-    fn deallocate_frame(&mut self, frame: PhysFrame);
-}
+// Size of a physical frame in bytes.
+// pub const FRAME_SIZE: usize = 4096;
 
 /// A simple bump allocator for physical memory frames.
 ///
@@ -112,24 +81,24 @@ impl BumpFrameAllocator {
     }
 }
 
-impl FrameAllocator for BumpFrameAllocator {
-    fn allocate_frame(&mut self) -> Option<PhysFrame> {
+unsafe impl FrameAllocator<Size4KiB> for BumpFrameAllocator {
+    fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+        let frame_size = Size4KiB::SIZE as usize;
         let current = self.next.load(Ordering::Relaxed);
-        let aligned = (current + FRAME_SIZE - 1) & !(FRAME_SIZE - 1);
-
-        if aligned + FRAME_SIZE <= self.end {
-            self.next.store(aligned + FRAME_SIZE, Ordering::Relaxed);
-            Some(PhysFrame {
-                start_address: aligned,
-            })
+        let aligned = (current + frame_size - 1) & !(frame_size - 1);
+        if aligned + frame_size <= self.end {
+            self.next.store(aligned + frame_size, Ordering::Relaxed);
+            Some(PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(
+                aligned as u64,
+            )))
         } else {
             None
         }
     }
 
-    fn deallocate_frame(&mut self, _frame: PhysFrame) {
-        // No-op: bump allocator cannot reuse frames without a free list.
-    }
+    // fn deallocate_frame(&mut self, _frame: PhysFrame<Size4KiB>) {
+    //     // No-op: bump allocator cannot reuse frames without a free list.
+    // }
 }
 
 impl fmt::Debug for BumpFrameAllocator {
@@ -147,7 +116,7 @@ impl fmt::Debug for BumpFrameAllocator {
 /// Maintains a list of free frames and supports allocation and deallocation.
 /// Suitable for dynamic memory management after boot.
 pub struct FreeListFrameAllocator {
-    free_list: Vec<PhysFrame>,
+    free_list: Vec<PhysFrame<Size4KiB>>,
 }
 
 impl FreeListFrameAllocator {
@@ -157,14 +126,47 @@ impl FreeListFrameAllocator {
     /// The given range must be frame-aligned and not overlap with used memory.
     pub unsafe fn new(start: usize, end: usize) -> Self {
         let mut free_list = Vec::new();
-        let mut addr = (start + FRAME_SIZE - 1) & !(FRAME_SIZE - 1);
-        while addr + FRAME_SIZE <= end {
-            free_list.push(PhysFrame {
-                start_address: addr,
-            });
-            addr += FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let mut addr = (start + frame_size - 1) & !(frame_size - 1);
+        while addr + frame_size <= end {
+            free_list.push(PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(
+                addr as u64,
+            )));
+            addr += frame_size;
         }
         FreeListFrameAllocator { free_list }
+    }
+
+    /// Creates a new free list frame allocator using a static mutable slice as storage.
+    ///
+    /// This avoids dynamic allocation and does not require a global allocator.
+    /// The slice will be used as a stack of frames; its length determines the maximum number of frames.
+    ///
+    /// Returns a tuple of the allocator and the number of frames initialized.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    /// - The given range (`start` to `end`) is frame-aligned and does not overlap with any used memory.
+    /// - The `backing` slice is large enough to hold all frames in the region, otherwise only as many frames as fit will be initialized.
+    /// - The `backing` slice is not aliased elsewhere while the allocator is in use.
+    pub unsafe fn new_static(
+        start: usize,
+        end: usize,
+        backing: &mut [PhysFrame<Size4KiB>],
+    ) -> (Self, usize) {
+        let mut count = 0;
+        let frame_size = Size4KiB::SIZE as usize;
+        let mut addr = (start + frame_size - 1) & !(frame_size - 1);
+        let max = backing.len();
+        while addr + frame_size <= end && count < max {
+            backing[count] = PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(addr as u64));
+            addr += frame_size;
+            count += 1;
+        }
+        // Use only the initialized part of the slice as the free list.
+        let free_list = Vec::from(&backing[..count]);
+        (FreeListFrameAllocator { free_list }, count)
     }
 
     /// Resets the allocator to a new region, clearing and repopulating the free list.
@@ -173,24 +175,36 @@ impl FreeListFrameAllocator {
     /// The given range must be frame-aligned and not overlap with used memory.
     pub unsafe fn reset(&mut self, start: usize, end: usize) {
         self.free_list.clear();
-        let mut addr = (start + FRAME_SIZE - 1) & !(FRAME_SIZE - 1);
-        while addr + FRAME_SIZE <= end {
-            self.free_list.push(PhysFrame {
-                start_address: addr,
-            });
-            addr += FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let mut addr = (start + frame_size - 1) & !(frame_size - 1);
+        while addr + frame_size <= end {
+            self.free_list
+                .push(PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(
+                    addr as u64,
+                )));
+            addr += frame_size;
         }
     }
-}
 
-impl FrameAllocator for FreeListFrameAllocator {
-    fn allocate_frame(&mut self) -> Option<PhysFrame> {
+    /// Allocates a frame. Returns `None` if out of memory.
+    pub fn alloc_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
         self.free_list.pop()
     }
 
-    fn deallocate_frame(&mut self, frame: PhysFrame) {
+    /// Frees a frame, making it available for reuse.
+    pub fn free_frame(&mut self, frame: PhysFrame<Size4KiB>) {
         self.free_list.push(frame);
     }
+}
+
+unsafe impl FrameAllocator<Size4KiB> for FreeListFrameAllocator {
+    fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+        self.free_list.pop()
+    }
+
+    // fn deallocate_frame(&mut self, frame: PhysFrame<Size4KiB>) {
+    //     self.free_list.push(frame);
+    // }
 }
 
 /// A thread-safe wrapper around FreeListFrameAllocator using a spinlock.
@@ -211,6 +225,28 @@ impl LockedFreeListFrameAllocator {
         LockedFreeListFrameAllocator {
             inner: spin::Mutex::new(unsafe { FreeListFrameAllocator::new(start, end) }),
         }
+    }
+
+    /// # Safety
+    /// The caller must ensure:
+    /// - The given memory range (`start` to `end`) is valid, frame-aligned, and does not overlap with any memory in use elsewhere.
+    /// - The `backing` slice is a unique, mutable reference for the lifetime of the allocator and is not aliased or mutated by other code.
+    /// - The `backing` slice is large enough to hold all frames in the region; if not, only as many frames as fit will be initialized.
+    /// - No other allocator or code will access or modify the frames managed by this allocator while it is in use.
+    ///
+    /// Failure to uphold these requirements may result in undefined behavior, memory corruption, or security vulnerabilities.
+    pub unsafe fn new_static(
+        start: usize,
+        end: usize,
+        backing: &mut [PhysFrame<Size4KiB>],
+    ) -> (Self, usize) {
+        let (alloc, count) = unsafe { FreeListFrameAllocator::new_static(start, end, backing) };
+        (
+            LockedFreeListFrameAllocator {
+                inner: spin::Mutex::new(alloc),
+            },
+            count,
+        )
     }
 
     /// Initializes a new locked free list frame allocator for the given region.
@@ -236,16 +272,20 @@ impl LockedFreeListFrameAllocator {
     pub fn lock(&'_ self) -> spin::MutexGuard<'_, FreeListFrameAllocator> {
         self.inner.lock()
     }
+    /// Allocates a frame using the inner allocator.
+    pub fn alloc_frame(&self) -> Option<PhysFrame<Size4KiB>> {
+        self.inner.lock().alloc_frame()
+    }
+    /// Deallocates a frame using the inner allocator.
+    pub fn free_frame(&self, frame: PhysFrame<Size4KiB>) {
+        self.inner.lock().free_frame(frame)
+    }
 }
 
 #[cfg(feature = "spin_lock")]
-impl FrameAllocator for LockedFreeListFrameAllocator {
-    fn allocate_frame(&mut self) -> Option<PhysFrame> {
-        self.inner.lock().allocate_frame()
-    }
-
-    fn deallocate_frame(&mut self, frame: PhysFrame) {
-        self.inner.lock().deallocate_frame(frame)
+unsafe impl FrameAllocator<Size4KiB> for LockedFreeListFrameAllocator {
+    fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+        FrameAllocator::allocate_frame(&mut *self.inner.lock())
     }
 }
 
@@ -256,77 +296,90 @@ mod tests {
     #[test]
     fn physframe_alignment() {
         let addr = 0x12345;
-        let frame = PhysFrame::containing_address(addr);
-        assert_eq!(frame.start_address % FRAME_SIZE, 0);
-        assert!(addr >= frame.start_address);
-        assert!(addr < frame.start_address + FRAME_SIZE);
+        let frame = PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(addr as u64));
+        let frame_size = Size4KiB::SIZE as usize;
+        assert_eq!(frame.start_address().as_u64() % frame_size as u64, 0);
+        let addr_val = addr as u64;
+        let frame_start = frame.start_address().as_u64();
+        let frame_limit = frame_start + frame_size as u64;
+        assert!(addr_val >= frame_start);
+        assert!(addr_val < frame_limit);
     }
 
     #[test]
     fn physframe_zero_address() {
-        let frame = PhysFrame::containing_address(0);
-        assert_eq!(frame.start_address, 0);
+        let frame = PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0));
+        assert_eq!(frame.start_address().as_u64(), 0);
     }
 
     #[test]
     fn physframe_unaligned_address() {
-        let addr = FRAME_SIZE * 5 + 123;
-        let frame = PhysFrame::containing_address(addr);
-        assert_eq!(frame.start_address, FRAME_SIZE * 5);
-        assert!(addr >= frame.start_address);
-        assert!(addr < frame.start_address + FRAME_SIZE);
+        let frame_size = Size4KiB::SIZE as usize;
+        let addr = frame_size * 5 + 123;
+        let frame = PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(addr as u64));
+        assert_eq!(frame.start_address().as_u64(), (frame_size * 5) as u64);
+        let addr_val = addr as u64;
+        let frame_start = frame.start_address().as_u64();
+        let frame_limit = frame_start + frame_size as u64;
+        assert!(addr_val >= frame_start);
+        assert!(addr_val < frame_limit);
     }
 
     #[test]
     fn bump_allocator_basic() {
         let start = 0x10000;
-        let end = start + 3 * FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + 3 * frame_size;
         let mut alloc = unsafe { BumpFrameAllocator::new(start, end) };
-        let f1 = alloc.allocate_frame();
-        let f2 = alloc.allocate_frame();
-        let f3 = alloc.allocate_frame();
+        let f1 = FrameAllocator::allocate_frame(&mut alloc);
+        let f2 = FrameAllocator::allocate_frame(&mut alloc);
+        let f3 = FrameAllocator::allocate_frame(&mut alloc);
         assert!(f1.is_some() && f2.is_some() && f3.is_some());
         assert_ne!(f1, f2);
         assert_ne!(f2, f3);
         assert_ne!(f1, f3);
         // Should be exhausted now
-        assert!(alloc.allocate_frame().is_none());
+        assert!(FrameAllocator::allocate_frame(&mut alloc).is_none());
     }
 
     #[test]
     fn bump_allocator_no_reuse() {
         let start = 0x20000;
-        let end = start + 2 * FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + 2 * frame_size;
         let mut alloc = unsafe { BumpFrameAllocator::new(start, end) };
-        let f1 = alloc.allocate_frame().unwrap();
-        alloc.deallocate_frame(f1);
-        let f2 = alloc.allocate_frame().unwrap();
+        let f1 = FrameAllocator::allocate_frame(&mut alloc).unwrap();
+        // FrameAllocator::deallocate_frame(&mut alloc, f1);
+        // The bump allocator does not support deallocation; skip this step.
+        let f2 = FrameAllocator::allocate_frame(&mut alloc).unwrap();
         assert_ne!(f1, f2, "Bump allocator must not reuse frames");
     }
 
     #[test]
     fn bump_allocator_zero_region() {
         let mut alloc = unsafe { BumpFrameAllocator::new(0, 0) };
-        assert!(alloc.allocate_frame().is_none());
+        assert!(FrameAllocator::allocate_frame(&mut alloc).is_none());
     }
 
     #[test]
     fn bump_allocator_unaligned_start() {
         let start = 0x12345;
-        let end = start + 2 * FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + 2 * frame_size;
         let mut alloc = unsafe { BumpFrameAllocator::new(start, end) };
-        let f1 = alloc.allocate_frame();
+        let f1 = FrameAllocator::allocate_frame(&mut alloc);
         assert!(f1.is_some());
-        assert_eq!(f1.unwrap().start_address % FRAME_SIZE, 0);
+        assert_eq!(f1.unwrap().start_address().as_u64() % frame_size as u64, 0);
     }
 
     #[test]
     fn bump_allocator_exhaustion() {
         let start = 0x80000;
-        let end = start + FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + frame_size;
         let mut alloc = unsafe { BumpFrameAllocator::new(start, end) };
-        let f1 = alloc.allocate_frame();
-        let f2 = alloc.allocate_frame();
+        let f1 = FrameAllocator::allocate_frame(&mut alloc);
+        let f2 = FrameAllocator::allocate_frame(&mut alloc);
         assert!(f1.is_some());
         assert!(f2.is_none());
     }
@@ -334,115 +387,125 @@ mod tests {
     #[test]
     fn freelist_allocator_basic() {
         let start = 0x30000;
-        let end = start + 2 * FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + 2 * frame_size;
         let mut alloc = unsafe { FreeListFrameAllocator::new(start, end) };
-        let f1 = alloc.allocate_frame();
-        let f2 = alloc.allocate_frame();
+        let f1 = FrameAllocator::allocate_frame(&mut alloc);
+        let f2 = FrameAllocator::allocate_frame(&mut alloc);
         assert!(f1.is_some() && f2.is_some());
         assert_ne!(f1, f2);
         // Should be exhausted now
-        assert!(alloc.allocate_frame().is_none());
+        assert!(FrameAllocator::allocate_frame(&mut alloc).is_none());
     }
 
     #[test]
     fn freelist_allocator_reuse() {
         let start = 0x40000;
-        let end = start + 2 * FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + 2 * frame_size;
         let mut alloc = unsafe { FreeListFrameAllocator::new(start, end) };
-        let f1 = alloc.allocate_frame().unwrap();
-        alloc.deallocate_frame(f1);
-        let f2 = alloc.allocate_frame().unwrap();
+        let f1 = FrameAllocator::allocate_frame(&mut alloc).unwrap();
+        alloc.free_frame(f1);
+        let f2 = FrameAllocator::allocate_frame(&mut alloc).unwrap();
         assert_eq!(f1, f2, "Freelist should reuse deallocated frames");
     }
 
     #[test]
     fn freelist_allocator_double_free() {
         let start = 0x50000;
-        let end = start + FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + frame_size;
         let mut alloc = unsafe { FreeListFrameAllocator::new(start, end) };
-        let f = alloc.allocate_frame().unwrap();
-        alloc.deallocate_frame(f);
-        alloc.deallocate_frame(f); // double free
+        let f = FrameAllocator::allocate_frame(&mut alloc).unwrap();
+        // FrameAllocator::deallocate_frame(&mut alloc, f);
+        // FrameAllocator::deallocate_frame(&mut alloc, f); // double free
+        alloc.free_frame(f);
+        alloc.free_frame(f); // Double free
         // Should be able to allocate twice, but not a third time
-        assert!(alloc.allocate_frame().is_some());
-        assert!(alloc.allocate_frame().is_some());
-        assert!(alloc.allocate_frame().is_none());
+        assert!(FrameAllocator::allocate_frame(&mut alloc).is_some());
+        assert!(FrameAllocator::allocate_frame(&mut alloc).is_some());
+        assert!(FrameAllocator::allocate_frame(&mut alloc).is_none());
     }
 
     #[test]
     fn freelist_allocator_alignment() {
         let start = 0x12345;
-        let end = start + 3 * FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + 3 * frame_size;
         let mut alloc = unsafe { FreeListFrameAllocator::new(start, end) };
-        let aligned_start = (start + FRAME_SIZE - 1) & !(FRAME_SIZE - 1);
+        let aligned_start = (start + frame_size - 1) & !(frame_size - 1);
         let n_frames = if end > aligned_start {
-            (end - aligned_start) / FRAME_SIZE
+            (end - aligned_start) / frame_size
         } else {
             0
         };
+        let frame_size = Size4KiB::SIZE as usize;
         for _ in 0..n_frames {
-            let f = alloc.allocate_frame().unwrap();
-            assert_eq!(f.start_address % FRAME_SIZE, 0);
+            let f = FrameAllocator::allocate_frame(&mut alloc).unwrap();
+            assert_eq!(f.start_address().as_u64() % frame_size as u64, 0);
         }
-        assert!(alloc.allocate_frame().is_none());
+        assert!(FrameAllocator::allocate_frame(&mut alloc).is_none());
     }
 
     #[test]
     fn freelist_allocator_zero_region() {
         let mut alloc = unsafe { FreeListFrameAllocator::new(0, 0) };
-        assert!(alloc.allocate_frame().is_none());
+        assert!(FrameAllocator::allocate_frame(&mut alloc).is_none());
     }
 
     #[test]
     fn freelist_allocator_unaligned_start() {
         let start = 0x12345;
-        let end = start + 2 * FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + 2 * frame_size;
         let mut alloc = unsafe { FreeListFrameAllocator::new(start, end) };
-        let f1 = alloc.allocate_frame();
+        let f1 = FrameAllocator::allocate_frame(&mut alloc);
         assert!(f1.is_some());
-        assert_eq!(f1.unwrap().start_address % FRAME_SIZE, 0);
+        assert_eq!(f1.unwrap().start_address().as_u64() % frame_size as u64, 0);
     }
 
     #[test]
     fn freelist_allocator_stress_many_frames() {
         let start = 0x100000;
         let n = 100;
-        let end = start + n * FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + n * frame_size;
         let mut alloc = unsafe { FreeListFrameAllocator::new(start, end) };
         let mut frames = Vec::new();
         for _ in 0..n {
-            let f = alloc.allocate_frame();
+            let f = FrameAllocator::allocate_frame(&mut alloc);
             assert!(f.is_some());
             frames.push(f.unwrap());
         }
-        assert!(alloc.allocate_frame().is_none());
+        assert!(FrameAllocator::allocate_frame(&mut alloc).is_none());
         // Deallocate all and reallocate all
         for f in &frames {
-            alloc.deallocate_frame(*f);
+            alloc.free_frame(*f);
         }
         let mut seen = Vec::new();
         for _ in 0..n {
-            let f = alloc.allocate_frame();
+            let f = FrameAllocator::allocate_frame(&mut alloc);
             assert!(f.is_some());
             let f = f.unwrap();
             assert!(!seen.contains(&f));
             seen.push(f);
         }
-        assert!(alloc.allocate_frame().is_none());
+        assert!(FrameAllocator::allocate_frame(&mut alloc).is_none());
     }
 
     #[test]
     fn freelist_allocator_reuse_order() {
         let start = 0x200000;
-        let end = start + 2 * FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + 2 * frame_size;
         let mut alloc = unsafe { FreeListFrameAllocator::new(start, end) };
-        let f1 = alloc.allocate_frame().unwrap();
-        let f2 = alloc.allocate_frame().unwrap();
-        alloc.deallocate_frame(f1);
-        alloc.deallocate_frame(f2);
+        let f1 = FrameAllocator::allocate_frame(&mut alloc).unwrap();
+        let f2 = FrameAllocator::allocate_frame(&mut alloc).unwrap();
+        alloc.free_frame(f1);
+        alloc.free_frame(f2);
         // Should get f2 first (LIFO)
-        let r1 = alloc.allocate_frame().unwrap();
-        let r2 = alloc.allocate_frame().unwrap();
+        let r1 = FrameAllocator::allocate_frame(&mut alloc).unwrap();
+        let r2 = FrameAllocator::allocate_frame(&mut alloc).unwrap();
         assert_eq!(r1, f2);
         assert_eq!(r2, f1);
     }
@@ -451,27 +514,29 @@ mod tests {
     #[test]
     fn locked_freelist_allocator_basic() {
         let start = 0x60000;
-        let end = start + 2 * FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + 2 * frame_size;
         let alloc = unsafe { LockedFreeListFrameAllocator::init(start, end) };
         let mut guard = alloc.lock();
-        let f1 = guard.allocate_frame();
-        let f2 = guard.allocate_frame();
+        let f1 = guard.alloc_frame();
+        let f2 = guard.alloc_frame();
         assert!(f1.is_some() && f2.is_some());
         assert_ne!(f1, f2);
         // Should be exhausted now
-        assert!(guard.allocate_frame().is_none());
+        assert!(guard.alloc_frame().is_none());
     }
 
     #[cfg(feature = "spin_lock")]
     #[test]
     fn locked_freelist_allocator_reuse() {
         let start = 0x70000;
-        let end = start + 2 * FRAME_SIZE;
+        let frame_size = Size4KiB::SIZE as usize;
+        let end = start + 2 * frame_size;
         let alloc = unsafe { LockedFreeListFrameAllocator::init(start, end) };
         let mut guard = alloc.lock();
-        let f1 = guard.allocate_frame().unwrap();
-        guard.deallocate_frame(f1);
-        let f2 = guard.allocate_frame().unwrap();
+        let f1 = guard.alloc_frame().unwrap();
+        guard.free_frame(f1);
+        let f2 = guard.alloc_frame().unwrap();
         assert_eq!(f1, f2, "LockedFreelist should reuse deallocated frames");
     }
 
@@ -480,6 +545,6 @@ mod tests {
     fn locked_freelist_allocator_empty() {
         let alloc = LockedFreeListFrameAllocator::empty();
         let mut guard = alloc.lock();
-        assert!(guard.allocate_frame().is_none());
+        assert!(guard.alloc_frame().is_none());
     }
 }

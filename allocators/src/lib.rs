@@ -51,6 +51,9 @@
 
 extern crate alloc;
 
+/// Bump allocator module: provides fast, linear allocation with no individual deallocation.
 pub mod bump;
+/// Frame allocator module: provides physical frame allocators for managing fixed-size memory frames.
 pub mod frame;
+/// Stack allocator module: provides LIFO (last-in, first-out) allocation and deallocation.
 pub mod stack;
