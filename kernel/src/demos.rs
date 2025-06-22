@@ -10,7 +10,6 @@ use alloc::format;
 use polished_pci::error::PciError;
 
 use spin::Mutex;
-use x86_64::{VirtAddr, structures::paging::PageTableFlags};
 
 use lazy_static::lazy_static;
 
@@ -37,75 +36,6 @@ lazy_static! {
     };
 }
 
-/// Physmap base: all physical memory is mapped at this virtual address offset
-const PHYSMAP_BASE: u64 = 0xFFFF_8000_0000_0000;
-
-/// Map a single 4KiB page at `virt` to `phys` with the given flags, using physmap for page table access.
-fn map_page(virt: u64, phys: u64, flags: PageTableFlags) {
-    use x86_64::{PhysAddr, structures::paging::*};
-
-    // Walk page tables using physmap
-    let pml4_phys = get_pml4_phys();
-    let pml4_virt = PHYSMAP_BASE + pml4_phys;
-    let pml4: &mut PageTable = unsafe { &mut *(pml4_virt as *mut PageTable) };
-
-    let indexes = [
-        (virt >> 39) & 0x1FF,
-        (virt >> 30) & 0x1FF,
-        (virt >> 21) & 0x1FF,
-        (virt >> 12) & 0x1FF,
-    ];
-
-    let mut table = pml4;
-    for &idx in indexes[..3].iter() {
-        if table[idx as usize].is_unused() {
-            let new_table = PAGE_ALLOCATOR
-                .lock()
-                .allocate_frame()
-                .expect("Failed to allocate page for page table");
-            table[idx as usize].set_addr(
-                PhysAddr::new(new_table.start_address().as_u64()),
-                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
-            );
-            // Zero the new table
-            let new_table_virt = PHYSMAP_BASE + new_table.start_address().as_u64();
-            unsafe {
-                core::ptr::write_bytes(new_table_virt as *mut u8, 0, 4096);
-            }
-        }
-        let next_table_phys = table[idx as usize].addr().as_u64();
-        let next_table_virt = PHYSMAP_BASE + next_table_phys;
-        table = unsafe { &mut *(next_table_virt as *mut PageTable) };
-    }
-    let pt = table;
-    let entry = &mut pt[indexes[3] as usize];
-    entry.set_addr(PhysAddr::new(phys), flags);
-    x86_64::instructions::tlb::flush(VirtAddr::new(virt));
-}
-
-/// Returns the physical address of the PML4 table (should be set by bootloader in a global/static)
-pub fn get_pml4_phys() -> u64 {
-    unsafe extern "C" {
-        static BOOT_PML4_PHYS: u64;
-    }
-    unsafe { BOOT_PML4_PHYS }
-}
-
-pub fn map_mmio_bar(virt_addr: u64, phys_addr: u64, size: u64) {
-    let mut offset = 0;
-    while offset < size {
-        let vaddr = virt_addr + offset;
-        let paddr = phys_addr + offset;
-
-        map_page(
-            vaddr,
-            paddr,
-            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_CACHE,
-        );
-        offset += 4096;
-    }
-}
-
 /// Demonstrates looking up and printing files from a ustar archive.
 pub fn demo_ustar_archive(ustar_archive: &'static [u8]) {
     // Example usage of the ustar module
@@ -113,7 +43,7 @@ pub fn demo_ustar_archive(ustar_archive: &'static [u8]) {
         Some(file) => file,
         None => {
             warn("File not found in archive: mytext.txt");
-            (b"" as &[u8], 0)
+            (b"".as_slice(), 0)
         }
     };
     info(&format!("Found file: mytext.txt, size: {}", file.1));
@@ -121,7 +51,7 @@ pub fn demo_ustar_archive(ustar_archive: &'static [u8]) {
         Some(file) => file,
         None => {
             warn("File not found in archive: hello_world.rs");
-            (b"" as &[u8], 0)
+            (b"".as_slice(), 0)
         }
     };
     info(&format!("Found file: hello_world.rs, size: {}", file.1));
@@ -129,45 +59,6 @@ pub fn demo_ustar_archive(ustar_archive: &'static [u8]) {
     // Print the contents of the file
     let file_contents = core::str::from_utf8(file.0).expect("Invalid UTF-8 in file");
     info(&format!("File contents:\n{file_contents}"));
-}
-
-pub fn test_page_mapping() {
-    let test_virt = 0xFFFF_9000_0000_0000u64;
-    let test_phys = 0x200000; // 2 MiB (just as a demo, must be safe)
-
-    // Use alloc::format! and pass as &str to info()
-    info(&alloc::format!(
-        "[paging-test] Mapping virt=0x{test_virt:x} to phys=0x{test_phys:x} with PRESENT|WRITABLE"
-    ));
-
-    // Map a page
-    map_page(
-        test_virt,
-        test_phys,
-        PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
-    );
-
-    info(&alloc::format!(
-        "[paging-test] Writing value 0x1234567890ABCDEF to virt=0x{test_virt:x}"
-    ));
-    let ptr = test_virt as *mut u64;
-    info("[paging-test] Created ptr variable");
-
-    info("[paging-test] Attempting to write to the mapped virtual address...");
-    unsafe {
-        // Page faults here
-        core::ptr::write_volatile(ptr, 0x1234567890ABCDEF);
-        info(&format!(
-            "[paging-test] Successfully wrote to virt=0x{test_virt:x}, now reading back..."
-        ));
-        let val = core::ptr::read_volatile(ptr);
-        info(&alloc::format!(
-            "[paging-test] Read value 0x{val:x} from virt=0x{test_virt:x}"
-        ));
-        assert_eq!(val, 0x1234567890ABCDEF, "paging test failed");
-    }
-
-    info("Paging test passed — mapping succeeded and memory is accessible.");
 }
 
 pub fn pci_testdev_demo() {

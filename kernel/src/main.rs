@@ -3,9 +3,12 @@
 
 extern crate alloc;
 
-use polished_bootloader::BootInfo;
+use polished_bootloader::{BootInfo, MEM_OFFSET};
 use polished_memory as _; // Import the memory module for memset, memcpy, etc.
 use polished_panic_handler as _;
+use x86_64::instructions::tlb;
+use x86_64::registers::control::Cr3;
+use x86_64::structures::paging::OffsetPageTable;
 
 use core::arch::{asm, naked_asm};
 use polished_ps2::ps2_init;
@@ -41,27 +44,15 @@ pub unsafe extern "C" fn naked_start() {
 }
 
 /// Unmap all identity-mapped pages in the lower half (0x0..0x00007fffffffffff)
-pub fn cleanup_uefi_identity_mappings() {
+pub fn clean_up_uefi_identity_mappings(table: &mut OffsetPageTable) {
     use polished_serial_logging::info;
-    use x86_64::VirtAddr;
-    use x86_64::structures::paging::{PageTable, PageTableFlags};
-
-    // Use physmap to access PML4
-    let pml4_phys = crate::demos::get_pml4_phys();
-    let pml4_virt = 0xFFFF_8000_0000_0000u64 + pml4_phys;
-    let pml4: &mut PageTable = unsafe { &mut *(pml4_virt as *mut PageTable) };
 
     // Unmap all PML4 entries for lower half (0..256)
     for i in 0..256 {
-        if pml4[i].flags().contains(PageTableFlags::PRESENT) {
-            pml4[i].set_unused();
-        }
+        table.level_4_table_mut()[i].set_unused();
     }
-    // Flush TLB for the entire lower half
-    for i in 0..256 {
-        let virt = (i as u64) << 39;
-        x86_64::instructions::tlb::flush(VirtAddr::new(virt));
-    }
+
+    tlb::flush_all();
     info("[paging] Cleaned up UEFI identity mappings (lower half)");
 }
 
@@ -75,6 +66,12 @@ unsafe fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     let fb = crate::framebuffer_utils::make_framebuffer_info(boot_info);
 
     info("Hello from the kernel!");
+
+    // Clean up uefi identity mapping since we are offset mapped now
+    let (table, _) = Cr3::read();
+    let mut page_table = unsafe { OffsetPageTable::new(&mut *((table.start_address().as_u64() + MEM_OFFSET.as_u64()) as *mut _), MEM_OFFSET) };
+    clean_up_uefi_identity_mappings(&mut page_table);
+
     info("Initializing GDT...");
     polished_gdt::init_gdt();
     info("GDT initialized");
@@ -103,14 +100,6 @@ unsafe fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
 
     // PCI device scan
     // pci_enumeration_demo();
-
-    // stop interrupts for a minute
-    // without_interrupts(|| {
-    //     // Paging test
-    //     info("Running paging test...");
-    //     test_page_mapping();
-    //     info("Paging test completed successfully");
-    // });
 
     // QEMU pci-testdev demo
     crate::demos::pci_testdev_demo();

@@ -46,10 +46,15 @@ use polished_graphics::framebuffer::FramebufferInfo;
 #[cfg(feature = "uefi")]
 use uefi::boot::exit_boot_services;
 #[cfg(feature = "uefi")]
+use uefi::mem::memory_map::MemoryMapOwned;
+#[cfg(feature = "uefi")]
 use uefi::{
     boot::{get_handle_for_protocol, open_protocol_exclusive},
     proto::console::text::Output,
 };
+
+use x86_64::VirtAddr;
+pub const MEM_OFFSET: VirtAddr = VirtAddr::new(0xffff_8000_0000_0000);
 
 // static NOOP_LOGGER;
 
@@ -123,8 +128,8 @@ pub struct BootInfo {
 pub fn boot_system(kernel_path: &str) {
     use polished_allocators::frame::BumpFrameAllocator;
     use polished_serial_logging::kprint;
-    use uefi::{boot::{self, memory_map, MemoryType}, mem::memory_map::MemoryMap};
-    use x86_64::structures::paging::OffsetPageTable;
+    use uefi::{boot::{memory_map, MemoryType}, mem::memory_map::MemoryMap};
+    use x86_64::{structures::paging::{OffsetPageTable, Page, PhysFrame, Size1GiB}, PhysAddr};
     info!("[boot] Searching for long free memory region");
     let mmap = memory_map(MemoryType::LOADER_DATA).unwrap();
     let memory_region = mmap.entries().find(|desc| desc.ty == MemoryType::CONVENTIONAL && desc.page_count >= 128).unwrap();
@@ -155,6 +160,23 @@ pub fn boot_system(kernel_path: &str) {
     let kernel_entry = load_kernel(kernel_path, &mut page_table, &mut frame_alloc);
     info!("[boot] Kernel load finished");
     info!("[boot] Kernel entry point: 0x{:x}", kernel_entry as usize);
+
+    // Map memory at an offset
+    let max_phys_addr = max_phys_addr(&mmap);
+    info!("[boot] Mapping 0x0-{max_phys_addr:x} with offset {MEM_OFFSET:x}");
+    let page_range = Page::<Size1GiB>::containing_address(MEM_OFFSET)..Page::<Size1GiB>::containing_address(MEM_OFFSET + max_phys_addr);
+    for page in page_range {
+        use x86_64::structures::paging::{Mapper, PageTableFlags};
+
+        let frame = PhysFrame::containing_address(PhysAddr::new(page.start_address() - MEM_OFFSET));
+        unsafe { page_table.map_to(page, frame, PageTableFlags::PRESENT | PageTableFlags::NO_EXECUTE | PageTableFlags::WRITABLE, &mut frame_alloc) }.unwrap().flush();
+    }
+    // Reenabling write protection because we are done with the page table here
+    unsafe {
+        use x86_64::registers::control::Cr0Flags;
+
+        x86_64::registers::control::Cr0::update(|x| x.insert(Cr0Flags::WRITE_PROTECT));
+    }
 
     info!("[boot] Starting framebuffer initialization");
     let framebuffer_info = initialize_framebuffer();
@@ -214,26 +236,21 @@ pub fn boot_system(kernel_path: &str) {
     kprint!("[boot] Kernel entry point call finished (should never return)");
 }
 
-// #[cfg(feature = "uefi")]
-// fn find_usable_frame_range(mem_map: &mut MemoryMapIter) -> Option<(u64, u64)> {
-//     let mut usable_start = u64::MAX;
-//     let mut usable_end = 0;
+#[cfg(feature = "uefi")]
+pub fn max_phys_addr(memmap: &MemoryMapOwned) -> u64 {
+        use uefi::mem::memory_map::MemoryMap;
 
-//     for desc in mem_map {
-//         if desc.ty == MemoryType::CONVENTIONAL {
-//             let start = desc.phys_start;
-//             let end = start + desc.page_count * 4096;
-//             usable_start = usable_start.min(start);
-//             usable_end = usable_end.max(end);
-//         }
-//     }
-
-//     if usable_start < usable_end {
-//         Some((usable_start, usable_end))
-//     } else {
-//         None
-//     }
-// }
+        memmap
+            .entries()
+            .filter(|x| x.ty.0 < 0x10) // skip weird custom stuff that is in the terabytes
+            .map(|x| x.phys_start + x.page_count * 4096)
+            .max()
+            .unwrap()
+            // Always cover at least the first 4 GiB of physical memory. That area
+            // contains useful MMIO regions (local APIC, I/O APIC, PCI bars) that
+            // we want to make accessible to the kernel even if no DRAM exists >4GiB.
+            .max(0x1_0000_0000)
+}
 
 #[cfg(feature = "uefi")]
 /// Initializes the UEFI environment and clears the screen.
