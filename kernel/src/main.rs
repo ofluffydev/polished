@@ -62,8 +62,8 @@ pub fn clean_up_uefi_identity_mappings(table: &mut OffsetPageTable) {
 unsafe fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     // Initialize heap allocator
     init_allocator();
-    let boot_info = unsafe { &*boot_info_ptr };
-    let fb = crate::framebuffer_utils::make_framebuffer_info(boot_info);
+    let boot_info = unsafe { *boot_info_ptr }; // copy it because we cant guarrantee it will still be mapped once we clean out identity mappings
+    let fb = crate::framebuffer_utils::make_framebuffer_info(&boot_info);
 
     info("Hello from the kernel!");
 

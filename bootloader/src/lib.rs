@@ -207,7 +207,7 @@ pub fn boot_system(kernel_path: &str) {
         initramfs_size: 0,     // TODO: Fill with real initramfs size if needed
         cmdline_addr: 0,       // TODO: Fill with real cmdline address if needed
         cmdline_len: 0,        // TODO: Fill with real cmdline length if needed
-        framebuffer_addr: framebuffer_info.address,
+        framebuffer_addr: framebuffer_info.address + MEM_OFFSET.as_u64(),
         framebuffer_width: framebuffer_info.width as u32,
         framebuffer_height: framebuffer_info.height as u32,
         framebuffer_pitch: pitch,
