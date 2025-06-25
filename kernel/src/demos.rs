@@ -1,4 +1,3 @@
-use polished_allocators::frame::LockedFreeListFrameAllocator;
 // Example demo code for using the ustar archive in the kernel
 use polished_files::ustar::tar_lookup;
 use polished_pci::{probe_bar, scan_bus0_devices};
@@ -8,33 +7,6 @@ extern crate alloc;
 use alloc::format;
 
 use polished_pci::error::PciError;
-
-use spin::Mutex;
-
-use lazy_static::lazy_static;
-
-/// You must implement this to return the actual physical frame range your kernel can allocate from.
-/// For example, from a UEFI bootloader memory map.
-fn get_usable_memory_range() -> (u64, u64) {
-    // This is a dummy example. You MUST replace this with actual memory info.
-    // Return values are *physical addresses*, not byte sizes.
-    let start_frame = 0x100_000; // Example: start at 1 MiB
-    let end_frame = 0x400_000; // Example: end at 4 MiB
-    (start_frame, end_frame)
-}
-
-lazy_static! {
-    /// The global page allocator for the kernel, initialized with a free list allocator.
-    pub static ref PAGE_ALLOCATOR: Mutex<LockedFreeListFrameAllocator> = {
-        let (start, end) = get_usable_memory_range();
-
-        // Sanity check
-        assert!(start < end, "Frame allocator: invalid memory range");
-
-        let allocator = unsafe { LockedFreeListFrameAllocator::new(start as usize, end as usize) };
-        Mutex::new(allocator)
-    };
-}
 
 /// Demonstrates looking up and printing files from a ustar archive.
 pub fn demo_ustar_archive(ustar_archive: &'static [u8]) {
@@ -59,6 +31,11 @@ pub fn demo_ustar_archive(ustar_archive: &'static [u8]) {
     // Print the contents of the file
     let file_contents = core::str::from_utf8(file.0).expect("Invalid UTF-8 in file");
     info(&format!("File contents:\n{file_contents}"));
+}
+
+pub fn demo_page_table() {
+    // Allocate a page to test page table functionality
+    unimplemented!("Page table demo not implemented yet");
 }
 
 pub fn pci_testdev_demo() {

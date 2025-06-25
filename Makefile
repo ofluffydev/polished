@@ -1,24 +1,76 @@
-# Variables
-OVMF_CODE = /usr/share/edk2/x64/OVMF_CODE.4m.fd
-OVMF_VARS = /usr/share/edk2/x64/OVMF_VARS.4m.fd
-# KERNEL_NAME = kernel
-FAT_IMG = fat.img
-ISO_FILE = polished.iso
-# KERNEL_PATH = $(CURDIR)/kernel/target/x86_64-custom/release/$(KERNEL_NAME)
-# BOOTLOADER_BUILD_DIR := $(if $(RELEASE),release,debug)
-BOOTLOADER_BUILD_DIR := $(if $(RELEASE),release,debug)
-BOOTLOADER_PATH = $(CURDIR)/target/x86_64-unknown-uefi/$(BOOTLOADER_BUILD_DIR)/polished_bootloader.efi
-ESP_DIR = esp/efi/boot
+# Nuke built-in rules and variables for a clean slate
+MAKEFLAGS += -rR
+.SUFFIXES:
 
-# Kernel path variables
-KERNEL_BUILD_DIR := $(if $(RELEASE),release,debug)
-KERNEL_NAME = kernel
-KERNEL_PATH = $(CURDIR)/target/x86_64-polished-kernel/$(KERNEL_BUILD_DIR)/$(KERNEL_NAME)
+# User-overridable variables
+KARCH ?= x86_64
+QEMUFLAGS ?= -m 2G --serial stdio -no-reboot
+# QEMUFLAGS ?= -m 2G -debugcon stdio -no-reboot
+# QEMUFLAGS ?= -m 2G -debugcon stdio -no-reboot -d int
+IMAGE_NAME := polished-$(KARCH)
 
-# QEMU extra flags
-QEMU_FLAGS ?=
+# --- Kernel build logic (moved from kernel/Makefile) ---
+# Target architecture to build for. Default to x86_64.
+RUST_TARGET ?= $(KARCH)-unknown-none
+ifeq ($(KARCH),riscv64)
+    RUST_TARGET := riscv64gc-unknown-none-elf
+endif
+RUST_PROFILE ?= dev
+RUST_PROFILE_SUBDIR := $(RUST_PROFILE)
+ifeq ($(RUST_PROFILE),dev)
+    RUST_PROFILE_SUBDIR := debug
+endif
+KERNEL_NAME := kernel
+KERNEL_PATH := $(CURDIR)/target/$(RUST_TARGET)/$(RUST_PROFILE_SUBDIR)/$(KERNEL_NAME)
 
-# USTAR archive creation (required before kernel build)
+# Limine paths
+LIMINE_DIR = limine
+LIMINE_BINARIES = $(LIMINE_DIR)/limine-bios.sys $(LIMINE_DIR)/limine-bios-cd.bin $(LIMINE_DIR)/limine-uefi-cd.bin $(LIMINE_DIR)/BOOTX64.EFI $(LIMINE_DIR)/BOOTIA32.EFI
+
+# OVMF firmware paths
+OVMF_CODE = ovmf/ovmf-code-$(KARCH).fd
+OVMF_VARS = ovmf/ovmf-vars-$(KARCH).fd
+
+.PHONY: all
+all: $(IMAGE_NAME).iso
+
+.PHONY: run
+run: run-x86_64
+
+.PHONY: qemu
+qemu: run-x86_64
+
+.PHONY: run-x86_64
+run-x86_64: $(OVMF_CODE) $(OVMF_VARS) $(IMAGE_NAME).iso
+	qemu-system-$(KARCH) \
+		-M q35 \
+		-drive if=pflash,unit=0,format=raw,file=$(OVMF_CODE),readonly=on \
+		-drive if=pflash,unit=1,format=raw,file=$(OVMF_VARS) \
+		-cdrom $(IMAGE_NAME).iso \
+		$(QEMUFLAGS)
+
+# Limine build (clone if missing, build binaries)
+$(LIMINE_DIR)/limine:
+	rm -rf $(LIMINE_DIR)
+	git clone https://github.com/limine-bootloader/limine.git --branch=v9.x-binary --depth=1
+	$(MAKE) -C $(LIMINE_DIR)
+
+# OVMF firmware download (x86_64 only)
+$(OVMF_CODE):
+	mkdir -p ovmf
+	curl -Lo $@ https://github.com/osdev0/edk2-ovmf-nightly/releases/latest/download/ovmf-code-$(KARCH).fd
+
+$(OVMF_VARS):
+	mkdir -p ovmf
+	curl -Lo $@ https://github.com/osdev0/edk2-ovmf-nightly/releases/latest/download/ovmf-vars-$(KARCH).fd
+
+# --- Kernel build (now in main Makefile) ---
+.PHONY: build-kernel
+build-kernel:
+	cd kernel && RUSTFLAGS="-C relocation-model=static" cargo build --target $(RUST_TARGET) --profile $(RUST_PROFILE)
+	cp target/$(RUST_TARGET)/$(RUST_PROFILE_SUBDIR)/kernel kernel/kernel
+
+# USTAR archive creation (preserved)
 .PHONY: ustar-archive
 ustar-archive:
 ifneq ($(USTAR),)
@@ -28,139 +80,32 @@ ifeq ($(USTAR),1)
 endif
 endif
 
-.PHONY: run clean build-kernel build-bootloader check-artifacts esp fat iso qemu rust-clean
+# ISO build using Limine (x86_64 only)
+$(IMAGE_NAME).iso: $(LIMINE_DIR)/limine build-kernel
+	rm -rf iso_root
+	mkdir -p iso_root/boot/limine
+	mkdir -p iso_root/EFI/BOOT
+	# Always copy the freshly built kernel from the correct target directory
+	cp -v kernel/kernel iso_root/boot/$(KERNEL_NAME)
+	cp -v limine.conf iso_root/boot/limine/ || true
+	cp -v $(LIMINE_DIR)/limine-bios.sys $(LIMINE_DIR)/limine-bios-cd.bin $(LIMINE_DIR)/limine-uefi-cd.bin iso_root/boot/limine/
+	cp -v $(LIMINE_DIR)/BOOTX64.EFI iso_root/EFI/BOOT/
+	cp -v $(LIMINE_DIR)/BOOTIA32.EFI iso_root/EFI/BOOT/
+	xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin \
+		-no-emul-boot -boot-load-size 4 -boot-info-table \
+		--efi-boot boot/limine/limine-uefi-cd.bin \
+		-efi-boot-part --efi-boot-image --protective-msdos-label \
+		iso_root -o $(IMAGE_NAME).iso
+	./$(LIMINE_DIR)/limine bios-install $(IMAGE_NAME).iso
+	rm -rf iso_root
 
-run: iso
-	# Run with QEMU
-	$(MAKE) qemu
+# Clean targets (preserve kernel clean, remove old images)
+.PHONY: clean
+clean:
+	cd kernel && cargo clean && rm -rf kernel
+	rm -rf iso_root $(IMAGE_NAME).iso $(IMAGE_NAME).hdd
 
-build-bootloader: ustar-archive
-	cargo build -p polished_bootloader --target x86_64-unknown-uefi --features uefi $(if $(filter release,$(BOOTLOADER_BUILD_DIR)),--release,)
-
-build-kernel: ustar-archive
-	env RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C link-args=-no-pie" \
-	cargo build -p kernel -Zbuild-std=core,alloc --target x86_64-polished-kernel.json $(if $(filter release,$(KERNEL_BUILD_DIR)),--release,)
-
-check-artifacts: build-kernel build-bootloader
-	@if [ ! -f $(BOOTLOADER_PATH) ]; then echo "Error: bootloader.efi not found!"; exit 1; fi
-
-esp: check-artifacts
-	mkdir -p $(ESP_DIR)
-	cp $(BOOTLOADER_PATH) $(ESP_DIR)/bootx64.efi
-	cp $(KERNEL_PATH) $(ESP_DIR)/$(KERNEL_NAME)
-
-fat: esp
-	dd if=/dev/zero of=$(FAT_IMG) bs=1M count=33
-	mformat -i $(FAT_IMG) -F ::
-	mmd -i $(FAT_IMG) ::/EFI
-	mmd -i $(FAT_IMG) ::/EFI/BOOT
-	mcopy -i $(FAT_IMG) $(ESP_DIR)/bootx64.efi ::/EFI/BOOT
-	mcopy -i $(FAT_IMG) $(ESP_DIR)/$(KERNEL_NAME) ::/EFI/BOOT
-
-iso: fat
-	mkdir -p iso
-	cp $(FAT_IMG) iso/
-ifneq ($(USTAR),)
-ifeq ($(USTAR),1)
-	# archive.tar is created by ustar-archive target
-	# Do not copy archive.tar to iso/ when USTAR=1
-endif
-endif
-	xorriso -as mkisofs -R -f -o $(ISO_FILE) iso \
-		-e $(FAT_IMG) -no-emul-boot
-
-# QEMU targets
-# Default: graphical QEMU
-qemu: iso disk
-	qemu-system-x86_64 \
-		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
-		-drive format=raw,file=$(ISO_FILE) \
-		-device virtio-blk-pci,drive=vdisk \
-		-device pci-testdev \
-		-drive id=vdisk,file=disk.img,if=none,format=raw \
-		-smp 4 -m 6G -cpu max \
-		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot \
-		$(QEMU_FLAGS)
-
-# Headless (no graphical output)
-qemu-nographic: iso disk
-	qemu-system-x86_64 \
-		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
-		-drive format=raw,file=$(ISO_FILE) \
-		-device virtio-blk-pci,drive=vdisk \
-		-device pci-testdev \
-		-drive id=vdisk,file=disk.img,if=none,format=raw \
-		-smp 4 -m 6G -cpu max \
-		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
-		-nographic \
-		$(QEMU_FLAGS)
-
-# QEMU with GDB stub (graphical)
-qemu-gdb: iso disk
-	qemu-system-x86_64 \
-		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
-		-drive format=raw,file=$(ISO_FILE) \
-		-device virtio-blk-pci,drive=vdisk \
-		-device pci-testdev \
-		-drive id=vdisk,file=disk.img,if=none,format=raw \
-		-smp 4 -m 6G -cpu max \
-		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 --serial stdio -M q35 --no-reboot \
-		-s -S \
-		-d unimp,guest_errors \
-		$(QEMU_FLAGS)
-
-# QEMU with GDB stub and no graphics
-qemu-gdb-nographic: iso disk
-	qemu-system-x86_64 \
-		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
-		-drive format=raw,file=$(ISO_FILE) \
-		-device virtio-blk-pci,drive=vdisk \
-		-device pci-testdev \
-		-drive id=vdisk,file=disk.img,if=none,format=raw \
-		-smp 4 -m 6G -cpu max \
-		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
-		-nographic \
-		-s -S \
-		-d unimp,guest_errors \
-		$(QEMU_FLAGS)
-
-# QEMU with extra debug output (interrupts)
-qemu-debug: iso disk
-	qemu-system-x86_64 \
-		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
-		-drive format=raw,file=$(ISO_FILE) \
-		-device virtio-blk-pci,drive=vdisk \
-		-device pci-testdev \
-		-drive id=vdisk,file=disk.img,if=none,format=raw \
-		-smp 4 -m 6G -cpu max \
-		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
-		-d int \
-		$(QEMU_FLAGS)
-
-qemu-debug-nographic: iso disk
-	qemu-system-x86_64 \
-		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
-		-drive format=raw,file=$(ISO_FILE) \
-		-device virtio-blk-pci,drive=vdisk \
-		-device pci-testdev \
-		-drive id=vdisk,file=disk.img,if=none,format=raw \
-		-smp 4 -m 6G -cpu max \
-		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -M q35 --no-reboot \
-		-nographic \
-		-d int \
-		$(QEMU_FLAGS)
-
-# Create a virtio disk image
-disk:
-	qemu-img create -f raw disk.img 64M
-
-rust-clean:
-	cd kernel && cargo clean
-	cd bootloader && cargo clean
-
-clean: rust-clean
-	rm -rf esp $(FAT_IMG) iso $(ISO_FILE)
-
+# --- Utility and publish targets (unchanged) ---
 format:
 	@echo "Formatting Rust code with cargo fmt..."
 	cargo fmt --all

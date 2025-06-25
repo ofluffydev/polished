@@ -34,7 +34,7 @@ fn send_eoi() {
 }
 
 pub extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    // kprint!("[INFO] INT 0x20: Timer interrupt\r\n"); // uncomment this if you want timer to scream at you
+    // kprint!("[INFO] INT 0x20: Timer interrupt"); // uncomment this if you want timer to scream at you
     send_eoi();
 }
 
@@ -50,7 +50,7 @@ pub extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: Interrupt
 
     if scancode == 0xFA {
         kprint!(
-            "[INFO] INT 0x21: Keyboard interrupt, received 0xFA (possible ACK, not a keypress)\r\n"
+            "[INFO] INT 0x21: Keyboard interrupt, received 0xFA (possible ACK, not a keypress)"
         );
     } else if scancode & 0x80 == 0 {
         // Only handle key press (make) codes, ignore break codes
@@ -58,14 +58,14 @@ pub extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: Interrupt
         match converted {
             Some(ascii) if ascii.is_ascii_graphic() || ascii == b' ' => {
                 kprint!(
-                    "[INFO] INT 0x21: Keyboard interrupt, scancode: {:#x} | ASCII: '{}'\r\n",
+                    "[INFO] INT 0x21: Keyboard interrupt, scancode: {:#x} | ASCII: '{}'",
                     scancode,
                     ascii as char
                 );
             }
             _ => {
                 kprint!(
-                    "[INFO] INT 0x21: Keyboard interrupt, scancode: {:#x} | ASCII: Unknown\r\n",
+                    "[INFO] INT 0x21: Keyboard interrupt, scancode: {:#x} | ASCII: Unknown",
                     scancode
                 );
             }
@@ -76,26 +76,26 @@ pub extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: Interrupt
 }
 
 pub extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    kprint!("[INFO] INT 0x2C: Mouse interrupt\r\n");
+    kprint!("[INFO] INT 0x2C: Mouse interrupt");
     // TODO: Read mouse data, send EOI
 }
 
 pub extern "x86-interrupt" fn disk_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    kprint!("[INFO] INT 0x2E: Disk controller interrupt\r\n");
+    kprint!("[INFO] INT 0x2E: Disk controller interrupt");
     // TODO: Handle disk I/O, send EOI
 }
 
 pub extern "x86-interrupt" fn network_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    kprint!("[INFO] INT 0x2B: Network card interrupt\r\n");
+    kprint!("[INFO] INT 0x2B: Network card interrupt");
     // TODO: Handle network I/O, send EOI
 }
 
 pub extern "x86-interrupt" fn usb_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    kprint!("[INFO] INT 0x37: USB controller interrupt\r\n");
+    kprint!("[INFO] INT 0x37: USB controller interrupt");
     // TODO: Handle USB I/O, send EOI
 }
 
 pub extern "x86-interrupt" fn other_hardware_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    kprint!("[INFO] INT 0x2F: Other hardware device interrupt\r\n");
+    kprint!("[INFO] INT 0x2F: Other hardware device interrupt");
     // TODO: Handle other hardware, send EOI
 }

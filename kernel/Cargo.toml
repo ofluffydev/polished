@@ -8,9 +8,9 @@ version = "0.1.1"
 
 [dependencies]
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+limine = "0.5.0"
 linked_list_allocator = "0.10.5"
 polished_allocators = { path = "../allocators", features = ["spin_lock"] }
-polished_bootloader = { path = "../bootloader", default-features = false }
 polished_elf_loader = { path = "../elf_loader", default-features = false }
 polished_files = { path = "../files", default-features = false }
 polished_gdt = { path = "../gdt" }

@@ -1,6 +1,5 @@
 [workspace]
 members = [
-  "bootloader",
   "kernel",
   "elf_loader",
   "files",

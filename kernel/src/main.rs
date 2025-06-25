@@ -3,16 +3,41 @@
 
 extern crate alloc;
 
-use polished_bootloader::{BootInfo, MEM_OFFSET};
-use polished_memory as _; // Import the memory module for memset, memcpy, etc.
-use polished_panic_handler as _;
-use x86_64::instructions::tlb;
-use x86_64::registers::control::Cr3;
-use x86_64::structures::paging::OffsetPageTable;
+use core::arch::asm;
 
-use core::arch::{asm, naked_asm};
+use limine::response::MemoryMapResponse;
+use polished_memory as _;
+use polished_panic_handler as _;
+
+use limine::BaseRevision;
+use limine::request::{FramebufferRequest, MemoryMapRequest, RequestsEndMarker, RequestsStartMarker};
+
+#[used]
+#[unsafe(link_section = ".requests")]
+static BASE_REVISION: BaseRevision = BaseRevision::new();
+
+#[used]
+#[unsafe(link_section = ".requests")]
+static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
+
+#[used]
+#[unsafe(link_section = ".requests")]
+static MEMORY_MAP_REQUEST: MemoryMapRequest = MemoryMapRequest::new();
+
+#[used]
+#[unsafe(link_section = ".requests_start_marker")]
+static _START_MARKER: RequestsStartMarker = RequestsStartMarker::new();
+#[used]
+#[unsafe(link_section = ".requests_end_marker")]
+static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
+
+use polished_memory as _;
+use polished_panic_handler as _;
 use polished_ps2::ps2_init;
 use polished_serial_logging::info;
+
+use crate::allocator::init_allocator;
+use crate::interrupts::init_interrupts;
 
 // Internal modules
 mod allocator;
@@ -20,57 +45,68 @@ pub mod demos;
 mod framebuffer_utils;
 mod interrupts;
 
-use crate::allocator::init_allocator;
-use crate::framebuffer_utils::{clear_framebuffer, log_framebuffer_info};
-use crate::interrupts::init_interrupts;
-
-/// # Safety
-/// This function is marked as naked and must only be called as the very first entry point
-/// after boot. It must not make any stack-based accesses before the stack pointer is set.
-#[unsafe(naked)]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn naked_start() {
-    // Set up the stack pointer to the top of the stack
-    naked_asm!(
-        "cli",
-        "lea rsp, STACK_TOP",
-        "call {entry}",
-        "2:",
-        "cli",
-        "hlt",
-        "jmp 2b",
-        entry = sym kernel_entry
-    );
+fn get_memory_map() -> &'static MemoryMapResponse {
+    MEMORY_MAP_REQUEST.get_response().unwrap()
 }
 
-/// Unmap all identity-mapped pages in the lower half (0x0..0x00007fffffffffff)
-pub fn clean_up_uefi_identity_mappings(table: &mut OffsetPageTable) {
-    use polished_serial_logging::info;
-
-    // Unmap all PML4 entries for lower half (0..256)
-    for i in 0..256 {
-        table.level_4_table_mut()[i].set_unused();
+/// Early boot no-alloc function to write a string to the serial console.
+pub fn write_str(s: &str) {
+    unsafe {
+        let prefix = "[write_str]: ";
+        asm!(
+            "rep outs dx, byte ptr [rsi]",
+            in("dx") 0xe9,
+            inout("rsi") prefix.as_ptr() => _,
+            inout("rcx") prefix.len() => _,
+            options(readonly, nostack)
+        );
+        asm!(
+            "rep outs dx, byte ptr [rsi]",
+            in("dx") 0xe9,
+            inout("rsi") s.as_ptr() => _,
+            inout("rcx") s.len() => _,
+            options(readonly, nostack)
+        );
+        let newline = "\r\n";
+        asm!(
+            "rep outs dx, byte ptr [rsi]",
+            in("dx") 0xe9,
+            inout("rsi") newline.as_ptr() => _,
+            inout("rcx") newline.len() => _,
+            options(readonly, nostack)
+        );
     }
-
-    tlb::flush_all();
-    info("[paging] Cleaned up UEFI identity mappings (lower half)");
 }
 
 /// # Safety
 /// This function must be called only as the kernel entry point, and the provided
 /// `boot_info_ptr` must be a valid pointer to a `BootInfo` structure, or null.
-unsafe fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
+#[unsafe(export_name = "kmain")]
+unsafe extern "C" fn kernel_entry() -> ! {
+    write_str("Kernel entry point reached!");
+    assert!(BASE_REVISION.is_supported());
+    if let Some(_framebuffer_response) = FRAMEBUFFER_REQUEST.get_response() {
+        // You can use the framebuffer here if you want, but leaving as placeholder per user request
+    }
+    write_str("Base revision is supported!");
+
+    // Unlike previous custom bootloader, we must setup memory ourselves
+    write_str("Getting memory map...");
+    let memory_map = get_memory_map();
+    write_str("Memory map obtained!");
+
+    write_str("Setting up room for heap...");
+    allocator::setup_heap_space(memory_map);
+    write_str("Room for heap set up!");
+
     // Initialize heap allocator
+    write_str("Initializing heap allocator...");
     init_allocator();
-    let boot_info = unsafe { *boot_info_ptr }; // copy it because we cant guarrantee it will still be mapped once we clean out identity mappings
-    let fb = crate::framebuffer_utils::make_framebuffer_info(&boot_info);
+    write_str("Heap allocator initialized!");
+    write_str("Kernel heap memory should be ready, switching to alloc logging now...");
 
+    // If this crashes, something is wrong with the heap allocator setup
     info("Hello from the kernel!");
-
-    // Clean up uefi identity mapping since we are offset mapped now
-    let (table, _) = Cr3::read();
-    let mut page_table = unsafe { OffsetPageTable::new(&mut *((table.start_address().as_u64() + MEM_OFFSET.as_u64()) as *mut _), MEM_OFFSET) };
-    clean_up_uefi_identity_mappings(&mut page_table);
 
     info("Initializing GDT...");
     polished_gdt::init_gdt();
@@ -79,21 +115,6 @@ unsafe fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     // Set up interrupts and PS/2
     init_interrupts();
     ps2_init();
-
-    // Framebuffer info and clear
-    log_framebuffer_info(&fb);
-    clear_framebuffer(&fb);
-
-    // Enable CPU interrupts
-    // x86_64::instructions::interrupts::enable();
-
-    // Assembly code to allow interrupts
-    unsafe {
-        asm!("sti");
-    }
-
-    // PCI device scan
-    // pci_enumeration_demo();
 
     // QEMU pci-testdev demo
     crate::demos::pci_testdev_demo();
@@ -108,9 +129,65 @@ unsafe fn kernel_entry(boot_info_ptr: *const BootInfo) -> ! {
     unsafe {
         asm!("sti");
     }
+    hcf();
+}
+
+// #[unsafe(no_mangle)]
+// unsafe extern "C" fn kmain() -> ! {
+//     write_str("Reached kernel main!\r\n");
+//     // All limine requests must also be referenced in a called function, otherwise they may be
+//     // removed by the linker.
+//     assert!(BASE_REVISION.is_supported());
+//     write_str("Base revision is supported!\r\n");
+
+//     write_str("Initializing heap allocator...\r\n");
+//     allocator::init_allocator();
+//     write_str("Allocator initialized!\r\n");
+
+//     write_str("Initializing GDT...\r\n");
+//     polished_gdt::init_gdt();
+//     write_str("GDT initialized\r\n");
+
+//     // Set up interrupts and PS/2
+//     write_str("Initializing interrupts...\r\n");
+//     interrupts::init_interrupts();
+//     write_str("Interrupts initialized\r\n");
+//     polished_ps2::ps2_init();
+//     write_str("PS/2 initialized\r\n");
+
+//     if let Some(framebuffer_response) = FRAMEBUFFER_REQUEST.get_response()
+//         && let Some(framebuffer) = framebuffer_response.framebuffers().next()
+//     {
+//         for i in 0..100_u64 {
+//             write_str("drawing...");
+//             // Calculate the pixel offset using the framebuffer information we obtained above.
+//             // We skip `i` scanlines (pitch is provided in bytes) and add `i * 4` to skip `i` pixels forward.
+//             let pixel_offset = i * framebuffer.pitch() + i * 4;
+
+//             // Write 0xFFFFFFFF to the provided pixel offset to fill it white.
+//             unsafe {
+//                 framebuffer
+//                     .addr()
+//                     .add(pixel_offset as usize)
+//                     .cast::<u32>()
+//                     .write(0xFFFFFFFF)
+//             };
+//         }
+//     }
+
+//     hcf();
+// }
+
+/// Halt and Catch Fire (HCF) function.
+fn hcf() -> ! {
     loop {
         unsafe {
-            asm!("pause; hlt");
-        } // Use PAUSE before HLT for better power efficiency
+            #[cfg(target_arch = "x86_64")]
+            asm!("hlt");
+            #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
+            asm!("wfi");
+            #[cfg(target_arch = "loongarch64")]
+            asm!("idle 0");
+        }
     }
 }

@@ -1,38 +1,63 @@
-ENTRY(naked_start)
+/* Tell the linker that we want an x86_64 ELF64 output file */
+OUTPUT_FORMAT(elf64-x86-64)
 
-SECTIONS {
+/* We want the symbol kmain to be our entry point */
+ENTRY(kmain)
 
+/* Define the program headers we want so the bootloader gives us the right */
+/* MMU permissions; this also allows us to exert more control over the linking */
+/* process. */
+PHDRS
+{
+    text    PT_LOAD;
+    rodata  PT_LOAD;
+    data    PT_LOAD;
+}
+
+SECTIONS
+{
+    /* We want to be placed in the topmost 2GiB of the address space, for optimisations */
+    /* and because that is what the Limine spec mandates. */
+    /* Any address in this region will do, but often 0xffffffff80000000 is chosen as */
+    /* that is the beginning of the region. */
     . = 0xffffffff80000000;
-    . = ALIGN(0x1000);
-    .text : ALIGN(4K)
-    {
-        *(.text.init .text .text.* .text*)
+
+    .text : {
+        *(.text .text.*)
     } :text
 
-    . = ALIGN(0x1000);
-    .rodata : ALIGN(4K)
-    {
-        *(.rodata .rodata.* .rodata*)
-        *(.srodata .srodata.* .srodata*)
+    /* Move to the next memory page for .rodata */
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
+
+    .rodata : {
+        *(.rodata .rodata.*)
     } :rodata
 
-    . = ALIGN(0x1000);
-    .data : ALIGN(4K)
-    {
-        *(.data .data.* .data*)
-        *(.sdata .sdata.* .sdata*)
+    /* Move to the next memory page for .data */
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
+
+    .data : {
+        *(.data .data.*)
+
+        /* Place the sections that contain the Limine requests as part of the .data */
+        /* output section. */
+        KEEP(*(.requests_start_marker))
+        KEEP(*(.requests))
+        KEEP(*(.requests_end_marker))
     } :data
 
-    . = ALIGN(0x1000);
-    .bss : ALIGN(4K)
-    {
+    /* NOTE: .bss needs to be the last thing mapped to :data, otherwise lots of */
+    /* unnecessary zeros will be written to the binary. */
+    /* If you need, for example, .init_array and .fini_array, those should be placed */
+    /* above this. */
+    .bss : {
+        *(.bss .bss.*)
         *(COMMON)
-        *(.bss .bss.* .bss*)
-        *(.sbss .sbss.* .sbss*)
-        // cant trust uefi
-        . = ALIGN(4096);
-        PROVIDE(STACK_BOTTOM = .);
-        . += 65536; /* Increased stack size to 64 KiB */
-        PROVIDE(STACK_TOP = .);
-    } :bss
+    } :data
+
+    /* Discard .note.* and .eh_frame* since they may cause issues on some hosts. */
+    /DISCARD/ : {
+        *(.eh_frame*)
+        *(.note .note.*)
+    }
 }
