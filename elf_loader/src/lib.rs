@@ -76,7 +76,11 @@ use xmas_elf::{ElfFile, program};
 /// // To start the kernel:
 /// unsafe { kernel_entry() };
 /// ```
-pub fn load_kernel(file_path: &str, page_table: &mut OffsetPageTable, frame_alloc: &mut impl FrameAllocator<Size4KiB>) -> unsafe extern "C" fn() -> ! {
+pub fn load_kernel(
+    file_path: &str,
+    page_table: &mut OffsetPageTable,
+    frame_alloc: &mut impl FrameAllocator<Size4KiB>,
+) -> unsafe extern "C" fn() -> ! {
     // Log the file path being loaded
     log::info!("Loading kernel from ELF file: {file_path}");
     // Read the entire ELF file into memory
@@ -86,7 +90,10 @@ pub fn load_kernel(file_path: &str, page_table: &mut OffsetPageTable, frame_allo
 
     // Iterate over each program header (segment) in the ELF file
     for ph in elf.program_iter() {
-        use x86_64::{structures::paging::{Page, PageTableFlags, Size4KiB}, VirtAddr};
+        use x86_64::{
+            VirtAddr,
+            structures::paging::{Page, PageTableFlags, Size4KiB},
+        };
 
         let ph_type = ph.get_type().ok();
         log::info!("Found program header: {ph_type:?}");
@@ -123,9 +130,7 @@ pub fn load_kernel(file_path: &str, page_table: &mut OffsetPageTable, frame_allo
         let page_end = Page::<Size4KiB>::containing_address(virt_addr + mem_size as u64);
         let page_range = page_start..=page_end;
 
-        log::info!(
-            "Allocating pages {page_range:?}"
-        );
+        log::info!("Allocating pages {page_range:?}");
 
         // Allocate memory at the requested virtual address
         for page in page_range {
@@ -134,14 +139,12 @@ pub fn load_kernel(file_path: &str, page_table: &mut OffsetPageTable, frame_allo
             let frame = frame_alloc.allocate_frame().unwrap();
 
             // Map the memory: virt_addr -> allocated frame
-            unsafe {
-                page_table.map_to(page, frame, flags, frame_alloc)
-            }.unwrap().flush();
+            unsafe { page_table.map_to(page, frame, flags, frame_alloc) }
+                .unwrap()
+                .flush();
         }
 
-        let segment = unsafe {
-            slice::from_raw_parts_mut(virt_addr.as_mut_ptr(), mem_size)
-        };
+        let segment = unsafe { slice::from_raw_parts_mut(virt_addr.as_mut_ptr(), mem_size) };
 
         // Copy segment data from the ELF file into the allocated memory
         segment[..file_size].copy_from_slice(&bytes[file_offset..file_offset + file_size]);

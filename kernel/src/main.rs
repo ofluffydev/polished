@@ -10,7 +10,9 @@ use polished_memory as _;
 use polished_panic_handler as _;
 
 use limine::BaseRevision;
-use limine::request::{FramebufferRequest, MemoryMapRequest, RequestsEndMarker, RequestsStartMarker};
+use limine::request::{
+    FramebufferRequest, MemoryMapRequest, RequestsEndMarker, RequestsStartMarker,
+};
 
 #[used]
 #[unsafe(link_section = ".requests")]

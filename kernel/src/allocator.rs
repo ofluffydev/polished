@@ -1,7 +1,7 @@
-use polished_allocators::frame::BumpFrameAllocator;
-use limine::response::MemoryMapResponse;
 use limine::request::HhdmRequest;
+use limine::response::MemoryMapResponse;
 use linked_list_allocator::LockedHeap;
+use polished_allocators::frame::BumpFrameAllocator;
 use x86_64::{
     PhysAddr, VirtAddr,
     structures::paging::{
@@ -95,14 +95,16 @@ pub fn map_heap_region(
 }
 
 pub fn get_frame_allocator(memory_map: &MemoryMapResponse) -> BumpFrameAllocator {
-    let (base, length) = find_usable_region(memory_map).expect("No suitable memory region found for frame allocator");
+    let (base, length) = find_usable_region(memory_map)
+        .expect("No suitable memory region found for frame allocator");
     // Safety: We assume the region is valid and not used elsewhere.
     unsafe { BumpFrameAllocator::new(base as usize, (base + length) as usize) }
 }
 
 pub fn setup_heap_space(memory_map: &MemoryMapResponse) {
     write_str("Setting up heap space...");
-    let (heap_phys_start, _heap_region_len) = find_usable_region(memory_map).expect("No suitable memory region found");
+    let (heap_phys_start, _heap_region_len) =
+        find_usable_region(memory_map).expect("No suitable memory region found");
     let heap_virt_start = VirtAddr::new(HEAP_START);
     let heap_phys_start = PhysAddr::new(heap_phys_start);
 
@@ -119,5 +121,11 @@ pub fn setup_heap_space(memory_map: &MemoryMapResponse) {
 
     // Only map the heap size, not the whole region
     write_str("Mapping heap region to virtual memory...");
-    map_heap_region(&mut mapper, &mut frame_allocator, heap_virt_start, heap_phys_start, HEAP_SIZE);
+    map_heap_region(
+        &mut mapper,
+        &mut frame_allocator,
+        heap_virt_start,
+        heap_phys_start,
+        HEAP_SIZE,
+    );
 }

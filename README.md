@@ -8,6 +8,14 @@ Photo by <a href="https://unsplash.com/@lifelivedinmono?utm_content=creditCopyTe
 
 ______________________________________________________________________
 
+## Limine Boot Protocol and Project Direction
+
+Polished OS now boots using the [Limine boot protocol](https://github.com/limine-bootloader/limine), replacing the previous custom UEFI bootloader based on `uefi-rs`. After extensive effort attempting to set up paging and following advice from multiple OSDev community members, the project moved to Limine for a more robust and maintainable boot process. The previous bootloader crate/folder has been removed. The `elf_loader` crate is no longer used for booting, but will be used in the future to run userspace ELF applications.
+
+This decision was made to simplify early kernel development and focus on OS features, rather than low-level bootloader maintenance.
+
+______________________________________________________________________
+
 ## Why Project Polished? A Welcoming Alternative to Elitism in OSDev
 
 One of the core purposes of project polished is to provide a welcoming, inclusive, and modern resource for operating system development—especially for those learning or experimenting with OSDev for the first time. Unlike the well-known https://wiki.osdev.org/, which unfortunately contains discouraging and elitist messages (such as the "Beginner mistakes" section that claims you need 10 years of experience, or that you are likely experiencing the Dunning-Kruger effect), project polished believes everyone learns at their own pace and should never be scared off by gatekeeping or arrogance. We reject the notion that only "experts" can build an OS, and we believe that teaching and encouragement are far more valuable than discouragement and exclusion.
@@ -44,9 +52,8 @@ ______________________________________________________________________
 
 This repository is organized as a Cargo workspace. Each component plays a role in building and running Polished OS:
 
-- **bootloader/** — UEFI bootloader written in Rust using `uefi-rs`, responsible for loading the kernel and passing control to it.
 - **kernel/** — Core of the OS. Handles memory management, initialization, and (eventually) POSIX/libc compatibility.
-- **elf_loader/** — Loads ELF binaries, used by the bootloader to load the kernel.
+- **elf_loader/** — ELF binary loader, planned for running userspace ELF applications (not used for booting).
 - **serial_logging/** — Serial port output for debugging and diagnostics.
 - **graphics/** — Basic framebuffer drawing and graphics primitives.
 - **interrupts/** — Interrupt Descriptor Table (IDT) setup and handling.
@@ -62,8 +69,9 @@ ______________________________________________________________________
 
 ## Features
 
-- UEFI bootloader (via `uefi-rs`)
-- ELF kernel loading
+- Limine-based boot (no custom UEFI bootloader)
+- Modular, scalable workspace
+- ELF loader for future userspace support
 - Custom heap allocator (buddy system)
 - Serial output logging
 - Modular, scalable workspace
@@ -140,7 +148,7 @@ ______________________________________________________________________
 
 ## Roadmap
 
-- [x] UEFI bootloader
+- [x] Limine-based boot protocol
 - [x] ELF kernel loading
 - [x] Custom heap allocator
 - [x] Serial logging
@@ -218,9 +226,10 @@ ______________________________________________________________________
 
 ## Acknowledgments
 
-- [uefi-rs](https://github.com/rust-osdev/uefi-rs) — UEFI support in Rust
 - [buddy_system_allocator](https://github.com/rcore-os/buddy_system_allocator) — Heap allocator
-- Rust OSDev community — For resources, examples, and inspiration
+- [limine-rust-template](https://github.com/jasondyoungberg/limine-rust-template) and [limine-rs](https://github.com/jasondyoungberg/limine-rs) — With special thanks to Jason himself for helping me figure it out
+- Rust OSDev community — For resources, examples, and inspiration. Namely members of the Rust Programming
+  Community Discord server, which was the only place I could find with helpful, non-elitist OSDev discussions.
 
 ______________________________________________________________________
 
