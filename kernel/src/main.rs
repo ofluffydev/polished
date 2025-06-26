@@ -11,7 +11,7 @@ use polished_panic_handler as _;
 
 use limine::BaseRevision;
 use limine::request::{
-    FramebufferRequest, MemoryMapRequest, RequestsEndMarker, RequestsStartMarker,
+    FramebufferRequest, HhdmRequest, MemoryMapRequest, RequestsEndMarker, RequestsStartMarker,
 };
 
 #[used]
@@ -25,6 +25,11 @@ static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
 #[used]
 #[unsafe(link_section = ".requests")]
 static MEMORY_MAP_REQUEST: MemoryMapRequest = MemoryMapRequest::new();
+
+// HHDM request for Limine
+#[used]
+#[unsafe(link_section = ".requests")]
+pub static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 
 #[used]
 #[unsafe(link_section = ".requests_start_marker")]

@@ -289,6 +289,31 @@ unsafe impl FrameAllocator<Size4KiB> for LockedFreeListFrameAllocator {
     }
 }
 
+#[cfg(feature = "limine")]
+pub fn find_usable_region(
+    mmap: &limine::response::MemoryMapResponse,
+    heap_size: usize,
+) -> Option<(u64, u64)> {
+    mmap.entries()
+        .iter()
+        .find(|entry| {
+            entry.entry_type == limine::memory_map::EntryType::USABLE
+                && entry.length >= heap_size as u64
+        })
+        .map(|entry| (entry.base, entry.length))
+}
+
+#[cfg(feature = "limine")]
+pub fn get_frame_allocator(
+    memory_map: &limine::response::MemoryMapResponse,
+    heap_size: usize,
+) -> BumpFrameAllocator {
+    let (base, length) = find_usable_region(memory_map, heap_size)
+        .expect("No suitable memory region found for frame allocator");
+    // Safety: We assume the region is valid and not used elsewhere.
+    unsafe { BumpFrameAllocator::new(base as usize, (base + length) as usize) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

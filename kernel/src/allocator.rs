@@ -1,7 +1,6 @@
-use limine::request::HhdmRequest;
 use limine::response::MemoryMapResponse;
 use linked_list_allocator::LockedHeap;
-use polished_allocators::frame::BumpFrameAllocator;
+use polished_allocators::frame::{find_usable_region, get_frame_allocator};
 use x86_64::{
     PhysAddr, VirtAddr,
     structures::paging::{
@@ -20,13 +19,8 @@ pub const HEAP_SIZE_USIZE: usize = 0x0100_0000; // 16 MB
 #[global_allocator]
 pub static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
-// HHDM request for Limine
-#[used]
-#[unsafe(link_section = ".requests")]
-pub static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
-
 fn get_hhdm_offset() -> u64 {
-    HHDM_REQUEST.get_response().unwrap().offset()
+    crate::HHDM_REQUEST.get_response().unwrap().offset()
 }
 
 pub fn init_allocator() {
@@ -35,15 +29,6 @@ pub fn init_allocator() {
     unsafe {
         ALLOCATOR.lock().init(heap_start, heap_size);
     }
-}
-
-fn find_usable_region(mmap: &limine::response::MemoryMapResponse) -> Option<(u64, u64)> {
-    mmap.entries()
-        .iter()
-        .find(|entry| {
-            entry.entry_type == limine::memory_map::EntryType::USABLE && entry.length >= HEAP_SIZE
-        })
-        .map(|entry| (entry.base, entry.length))
 }
 
 unsafe fn active_level_4_table(physical_memory_offset: VirtAddr) -> &'static mut PageTable {
@@ -94,17 +79,10 @@ pub fn map_heap_region(
     write_str("Heap region mapped successfully");
 }
 
-pub fn get_frame_allocator(memory_map: &MemoryMapResponse) -> BumpFrameAllocator {
-    let (base, length) = find_usable_region(memory_map)
-        .expect("No suitable memory region found for frame allocator");
-    // Safety: We assume the region is valid and not used elsewhere.
-    unsafe { BumpFrameAllocator::new(base as usize, (base + length) as usize) }
-}
-
 pub fn setup_heap_space(memory_map: &MemoryMapResponse) {
     write_str("Setting up heap space...");
     let (heap_phys_start, _heap_region_len) =
-        find_usable_region(memory_map).expect("No suitable memory region found");
+        find_usable_region(memory_map, HEAP_SIZE_USIZE).expect("No suitable memory region found");
     let heap_virt_start = VirtAddr::new(HEAP_START);
     let heap_phys_start = PhysAddr::new(heap_phys_start);
 
@@ -116,7 +94,7 @@ pub fn setup_heap_space(memory_map: &MemoryMapResponse) {
     write_str("Memory mapper initialized");
 
     write_str("Getting frame allocator...");
-    let mut frame_allocator = get_frame_allocator(memory_map);
+    let mut frame_allocator = get_frame_allocator(memory_map, HEAP_SIZE_USIZE);
     write_str("Frame allocator obtained");
 
     // Only map the heap size, not the whole region

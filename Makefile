@@ -152,3 +152,9 @@ publish-dry-run:
 	-cargo publish -p polished_x86_commands   --allow-dirty --dry-run
 	-cargo publish -p polished_pci            --allow-dirty --dry-run
 	-cargo publish -p polished_allocators     --allow-dirty --dry-run
+
+push:
+	git push origin --all
+	git push github --all
+	git push origin --tags
+	git push github --tags
