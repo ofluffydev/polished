@@ -1,7 +1,0 @@
-/target
-/esp
-/iso
-/ovmf
-/limine
-*.iso
-*.img
